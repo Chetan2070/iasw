@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.workers.celery_app import celery_app
 from app.config import settings
-from app.models import PendingRequest, AuditLog, RequestStatus, ActorType, EventType
+from app.models import Request, AuditLog, RequestStatus, ActorType, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 # (Celery doesn't play well with async by default)
 sync_engine = create_engine(settings.DATABASE_SYNC_URL)
 SyncSessionLocal = sessionmaker(bind=sync_engine)
+
+
+def update_processing_step(request_id: str, step: str):
+    """Update the current processing step in the database."""
+    try:
+        with SyncSessionLocal() as session:
+            request = session.query(Request).filter(
+                Request.request_id == request_id
+            ).first()
+            if request:
+                request.current_processing_step = step
+                session.commit()
+                logger.info(f"[{request_id}] Updated processing step to: {step}")
+    except Exception as e:
+        logger.warning(f"[{request_id}] Failed to update processing step: {e}")
 
 
 class ProcessDocumentTask(Task):
@@ -44,8 +59,8 @@ class ProcessDocumentTask(Task):
         # Update request status to FAILED
         try:
             with SyncSessionLocal() as session:
-                request = session.query(PendingRequest).filter(
-                    PendingRequest.request_id == request_id
+                request = session.query(Request).filter(
+                    Request.request_id == request_id
                 ).first()
 
                 if request:
@@ -99,8 +114,8 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
 
     with SyncSessionLocal() as session:
         # 1. Load request
-        request = session.query(PendingRequest).filter(
-            PendingRequest.request_id == request_id
+        request = session.query(Request).filter(
+            Request.request_id == request_id
         ).first()
 
         if not request:
@@ -134,6 +149,14 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
         try:
             # Import here to avoid circular imports
             from app.agents.graph import pipeline
+            from app.config import BACKEND_DIR
+            import os
+
+            # Resolve document path (convert relative to absolute if needed)
+            document_path = request.document_storage_path
+            if document_path and not os.path.isabs(document_path):
+                # Relative paths are relative to backend directory
+                document_path = os.path.join(BACKEND_DIR, document_path.lstrip('./'))
 
             # Run async pipeline in sync context
             final_state = asyncio.run(
@@ -144,7 +167,7 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
                     document_type=request.document_type.value,
                     requested_old_value=request.requested_old_value,
                     requested_new_value=request.requested_new_value,
-                    document_path=request.document_storage_path,
+                    document_path=document_path,
                 )
             )
 
@@ -194,6 +217,7 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
             request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN
             request.processing_completed_at = datetime.utcnow()
             request.staged_at = datetime.utcnow()
+            request.current_processing_step = None  # Clear processing step
 
             # Create FileNet staging ID (mock)
             request.filenet_staging_id = f"FN-STG-{request_id}"
@@ -224,7 +248,7 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
 
             logger.info(
                 f"[{request_id}] Processing complete - "
-                f"score: {final_state.get('overall_score'):.2f}, "
+                f"score: {final_state.get('overall_score') or 0:.2f}, "
                 f"recommendation: {final_state.get('ai_recommendation')}"
             )
 
@@ -283,9 +307,9 @@ def cleanup_expired_locks():
         now = datetime.utcnow()
 
         # Find requests with expired locks
-        expired_requests = session.query(PendingRequest).filter(
-            PendingRequest.status == RequestStatus.IN_REVIEW,
-            PendingRequest.checker_lock_until < now,
+        expired_requests = session.query(Request).filter(
+            Request.status == RequestStatus.IN_REVIEW,
+            Request.checker_lock_until < now,
         ).all()
 
         released_count = 0

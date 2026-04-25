@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.enums import RequestStatus, RiskTier, Recommendation, Decision
 
 

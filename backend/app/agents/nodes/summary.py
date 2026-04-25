@@ -16,22 +16,16 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_SYSTEM_PROMPT = """You are a document verification summary agent for a banking system.
-Your task is to generate a clear, concise summary for a human checker who will review the request.
+SUMMARY_SYSTEM_PROMPT = """You are a document verification summary agent for a banking name change system.
+Generate a clear, professional summary for a human reviewer.
 
-The summary should:
-1. State what was verified and how
-2. Highlight any flags or concerns
-3. Include a clear recommendation: APPROVE, REJECT, or MANUAL_REVIEW
+Your summary must:
+1. Confirm whether the submitted document supports the name change request
+2. Mention the key verification results (name match, document authenticity)
+3. Highlight any flags or concerns that need attention
+4. End with a clear recommendation
 
-Keep the summary to 2-3 sentences maximum. Be direct and factual.
-
-Format your response as JSON:
-{
-    "summary": "Your 2-3 sentence summary here",
-    "recommendation": "APPROVE" or "REJECT" or "MANUAL_REVIEW",
-    "key_points": ["point 1", "point 2"]
-}"""
+Write in 2-3 concise sentences. Be direct and factual. No markdown formatting."""
 
 
 def determine_recommendation(state: ProcessingState) -> str:
@@ -111,52 +105,42 @@ async def summary_node(state: ProcessingState) -> Dict[str, Any]:
         llm = ChatAnthropic(**llm_kwargs)
 
         # Build context for LLM
-        context = f"""Document Type: {state.get('document_type', 'Unknown')}
-Detected Type: {state.get('detected_document_type', 'Unknown')}
-Classification Match: {state.get('classification_match', False)}
+        context = f"""NAME CHANGE REQUEST VERIFICATION
 
-Requested Change:
-- Old Name: {state.get('requested_old_value', 'N/A')}
-- New Name: {state.get('requested_new_value', 'N/A')}
+Customer's current name: {state.get('requested_old_value', 'N/A')}
+Customer's requested new name: {state.get('requested_new_value', 'N/A')}
+Document type submitted: {state.get('document_type', 'Unknown')}
 
-Extracted Values:
-- Old Name: {state.get('extracted_old_value', 'N/A')}
-- New Name: {state.get('extracted_new_value', 'N/A')}
+VERIFICATION RESULTS:
+- Name extracted from document: {state.get('extracted_new_value', 'Not found')}
+- Name match score: {state.get('new_name_match_score', 0):.0%}
+- Document authenticity: {state.get('forgery_score', 0):.0%} ({state.get('forgery_result', 'Unknown')})
+- OCR confidence: {state.get('ocr_confidence', 0):.0%}
+- Overall confidence: {state.get('overall_score', 0):.0%}
+- Risk tier: {state.get('risk_tier', 'Unknown')}
+- Flags: {', '.join(state.get('flags', [])) or 'None'}
 
-Scores:
-- Old Name Match: {state.get('old_name_match_score', 0):.0%}
-- New Name Match: {state.get('new_name_match_score', 0):.0%}
-- OCR Confidence: {state.get('ocr_confidence', 0):.0%}
-- Document Authenticity: {state.get('forgery_score', 0):.0%}
-- Overall Score: {state.get('overall_score', 0):.0%}
+AI Recommendation: {recommendation}
 
-Forgery Check: {state.get('forgery_result', 'Unknown')}
-Risk Tier: {state.get('risk_tier', 'Unknown')}
-Flags: {', '.join(state.get('flags', [])) or 'None'}
-
-Predetermined Recommendation: {recommendation}"""
+Generate a 2-3 sentence summary for the human reviewer."""
 
         # Create messages
         messages = [
             SystemMessage(content=SUMMARY_SYSTEM_PROMPT),
-            HumanMessage(content=f"Generate a summary for this verification:\n\n{context}")
+            HumanMessage(content=context)
         ]
 
         # Call LLM
         response = await llm.ainvoke(messages)
-        response_text = response.content
+        summary = response.content.strip()
 
-        # Parse JSON response
-        try:
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                result = json.loads(response_text[json_start:json_end])
-                summary = result.get('summary', '')
-            else:
-                summary = response_text.strip()
-        except json.JSONDecodeError:
-            summary = response_text.strip()
+        # Remove any JSON formatting if present
+        if summary.startswith('{'):
+            try:
+                result = json.loads(summary)
+                summary = result.get('summary', summary)
+            except json.JSONDecodeError:
+                pass
 
         # Ensure recommendation is appended to summary
         if recommendation not in summary:
@@ -168,7 +152,7 @@ Predetermined Recommendation: {recommendation}"""
             "node": "summary",
             "model": settings.LLM_MODEL,
             "input_tokens": len(context.split()),
-            "output_tokens": len(response_text.split()),
+            "output_tokens": len(summary.split()),
         })
 
         logger.info(f"[{request_id}] Summary generated - recommendation: {recommendation}")
@@ -183,14 +167,33 @@ Predetermined Recommendation: {recommendation}"""
     except Exception as e:
         logger.error(f"[{request_id}] Summary generation failed: {str(e)}")
 
-        # Generate fallback summary
+        # Generate better fallback summary
         recommendation = determine_recommendation(state)
-        fallback_summary = (
-            f"Document verification completed. "
-            f"Overall confidence: {state.get('overall_score', 0):.0%}. "
-            f"Risk tier: {state.get('risk_tier', 'Unknown')}. "
-            f"Recommendation: {recommendation}"
-        )
+        extracted_name = state.get('extracted_new_value', 'N/A')
+        requested_new = state.get('requested_new_value', 'N/A')
+        match_score = state.get('new_name_match_score', 0)
+        forgery_result = state.get('forgery_result', 'Unknown')
+        flags = state.get('flags', [])
+
+        # Build a meaningful fallback summary
+        if match_score >= 0.9 and forgery_result == "PASS":
+            fallback_summary = (
+                f"The submitted document contains the name '{extracted_name}' which matches the requested new name "
+                f"with {match_score:.0%} confidence. Document authenticity verified ({forgery_result}). "
+                f"Recommendation: {recommendation}."
+            )
+        elif match_score < 0.7:
+            fallback_summary = (
+                f"Name verification issue: Document shows '{extracted_name}' but customer requested '{requested_new}' "
+                f"(match score: {match_score:.0%}). Manual review required. Recommendation: {recommendation}."
+            )
+        else:
+            flag_text = f" Flags: {', '.join(flags)}." if flags else ""
+            fallback_summary = (
+                f"Document verification completed with {state.get('overall_score', 0):.0%} confidence. "
+                f"Name match: {match_score:.0%}, Authenticity: {forgery_result}.{flag_text} "
+                f"Recommendation: {recommendation}."
+            )
 
         return {
             "ai_summary": fallback_summary,

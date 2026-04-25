@@ -1,5 +1,5 @@
 """
-PendingRequest Model
+Request Model
 
 Core entity representing a change request in the system.
 """
@@ -16,15 +16,15 @@ from app.models.enums import (
 )
 
 
-class PendingRequest(Base):
+class Request(Base):
     """
-    Represents a change request in the pending table.
+    Represents a change request.
 
     This is the core entity that tracks a request through the entire
     workflow from intake to completion.
     """
 
-    __tablename__ = "pending_requests"
+    __tablename__ = "requests"
 
     # ===================
     # Identity
@@ -88,6 +88,7 @@ class PendingRequest(Base):
     # Workflow Status
     # ===================
     status = Column(SQLEnum(RequestStatus), nullable=False, default=RequestStatus.INTAKE_RECEIVED, index=True)
+    current_processing_step = Column(String(50), nullable=True)  # Current step in AI pipeline
     assigned_checker = Column(String(50), nullable=True, index=True)
     checker_lock_until = Column(DateTime, nullable=True)
     checker_decision = Column(SQLEnum(Decision), nullable=True)
@@ -120,7 +121,7 @@ class PendingRequest(Base):
     last_updated_by = Column(String(50), nullable=True)
 
     def __repr__(self):
-        return f"<PendingRequest {self.request_id} - {self.status}>"
+        return f"<Request {self.request_id} - {self.status}>"
 
     @property
     def is_locked(self) -> bool:

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Plus, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { requestsApi } from "@/lib/api";
 import { RequestSummary, STATUS_LABELS, CHANGE_TYPE_LABELS } from "@/types";
 import { getTimeAgo } from "@/lib/utils";
+import { usePolling } from "@/hooks/usePolling";
 
 export default function StaffDashboard() {
   const [recentRequests, setRecentRequests] = useState<RequestSummary[]>([]);
@@ -17,36 +18,25 @@ export default function StaffDashboard() {
     rejected: 0,
   });
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await requestsApi.list({ limit: 5 });
-        setRecentRequests(response.items);
+  const fetchData = useCallback(async () => {
+    try {
+      // Fetch recent requests and stats in parallel
+      const [recentResponse, statsResponse] = await Promise.all([
+        requestsApi.list({ limit: 5 }),
+        requestsApi.getStats(),
+      ]);
 
-        const allRequests = await requestsApi.list({ limit: 1000 });
-        const items = allRequests.items;
-        setStats({
-          total: items.length,
-          pending: items.filter(
-            (r) =>
-              !["APPROVED", "REJECTED", "COMPLETED", "FAILED"].includes(r.status)
-          ).length,
-          approved: items.filter(
-            (r) => r.status === "APPROVED" || r.status === "COMPLETED"
-          ).length,
-          rejected: items.filter(
-            (r) => r.status === "REJECTED" || r.status === "FAILED"
-          ).length,
-        });
-      } catch (error) {
-        console.error("Failed to fetch requests:", error);
-      } finally {
-        setLoading(false);
-      }
+      setRecentRequests(recentResponse.items);
+      setStats(statsResponse);
+    } catch (error) {
+      console.error("Failed to fetch requests:", error);
+    } finally {
+      setLoading(false);
     }
-
-    fetchData();
   }, []);
+
+  // Auto-refresh every 10 seconds
+  usePolling(fetchData, 10000);
 
   const getStatusIcon = (status: string) => {
     if (status === "APPROVED" || status === "COMPLETED") {

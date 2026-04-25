@@ -2,21 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserCheck, ClipboardList, Clock, Home } from "lucide-react";
+import { UserCheck, ClipboardList, Clock, Home, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CheckerProvider, useChecker } from "@/contexts/CheckerContext";
 
 const navigation = [
   { name: "Dashboard", href: "/checker", icon: Home },
   { name: "Review Queue", href: "/checker/queue", icon: ClipboardList },
-  { name: "My Reviews", href: "/checker/reviews", icon: Clock },
+  { name: "Reviews", href: "/checker/reviews", icon: Clock },
 ];
 
-export default function CheckerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function CheckerLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { checkerId, checkerName } = useChecker();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -35,7 +33,10 @@ export default function CheckerLayout({
                 Checker Workbench
               </span>
             </div>
-            <div className="text-sm text-gray-500">Checker: CHK-001</div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <User className="h-4 w-4" />
+              <span className="font-medium">{checkerId}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -76,5 +77,17 @@ export default function CheckerLayout({
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+export default function CheckerLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <CheckerProvider>
+      <CheckerLayoutContent>{children}</CheckerLayoutContent>
+    </CheckerProvider>
   );
 }

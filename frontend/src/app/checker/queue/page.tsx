@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   Eye,
   Filter,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { checkerApi } from "@/lib/api";
 import {
@@ -21,24 +22,27 @@ import {
   RECOMMENDATION_COLORS,
 } from "@/types";
 import { cn, formatPercentage } from "@/lib/utils";
+import { usePolling } from "@/hooks/usePolling";
+import { useChecker } from "@/contexts/CheckerContext";
 
-const CHECKER_ID = "CHK-001";
-
-export default function QueuePage() {
+function QueuePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { checkerId } = useChecker();
 
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    risk_tier: RiskTier | "";
+    ai_recommendation: Recommendation | "";
+  }>({
     risk_tier: (searchParams.get("risk_tier") as RiskTier) || "",
     ai_recommendation:
       (searchParams.get("ai_recommendation") as Recommendation) || "",
   });
 
-  const fetchQueue = async () => {
-    setLoading(true);
+  const fetchQueue = useCallback(async () => {
     try {
       const params: Record<string, any> = {};
       if (filters.risk_tier) params.risk_tier = filters.risk_tier;
@@ -52,20 +56,21 @@ export default function QueuePage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchQueue();
   }, [filters]);
+
+  // Auto-refresh every 5 seconds
+  usePolling(fetchQueue, 5000);
 
   const handleClaim = async (requestId: string) => {
     setClaiming(requestId);
     try {
-      await checkerApi.claim(requestId, CHECKER_ID);
+      await checkerApi.claim(requestId, checkerId);
       router.push(`/checker/review/${requestId}`);
     } catch (error: any) {
       console.error("Failed to claim request:", error);
-      alert(error.response?.data?.detail || "Failed to claim request");
+      const detail = error.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to claim request";
+      alert(errorMsg);
     } finally {
       setClaiming(null);
     }
@@ -302,5 +307,17 @@ export default function QueuePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function QueuePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+      </div>
+    }>
+      <QueuePageContent />
+    </Suspense>
   );
 }

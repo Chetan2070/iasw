@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import patch, MagicMock
 
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.enums import RequestStatus, ChangeType, DocumentType
 
 

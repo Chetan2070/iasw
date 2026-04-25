@@ -4,10 +4,14 @@ IASW Backend Configuration
 Loads settings from environment variables with validation.
 """
 
+import os
 from typing import List
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from functools import lru_cache
+
+# Get the absolute path to the backend directory
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Settings(BaseSettings):
@@ -67,7 +71,7 @@ class Settings(BaseSettings):
     # Storage
     # ===================
     STORAGE_TYPE: str = "local"  # "local" or "s3"
-    STORAGE_PATH: str = "./storage"
+    STORAGE_PATH: str = os.path.join(BACKEND_DIR, "storage")
     S3_BUCKET: str = ""
     S3_REGION: str = ""
 
@@ -109,6 +113,14 @@ class Settings(BaseSettings):
     LANGCHAIN_TRACING_V2: bool = True
     LANGCHAIN_API_KEY: str = ""
     LANGCHAIN_PROJECT: str = "iasw"
+
+    # ===================
+    # Agent Architecture
+    # ===================
+    USE_SUPERVISOR_AGENTS: bool = Field(
+        default=True,
+        description="Use supervisor-agent architecture instead of linear pipeline"
+    )
 
     # ===================
     # File Validation

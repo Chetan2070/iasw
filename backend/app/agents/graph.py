@@ -2,6 +2,10 @@
 Document Processing Graph
 
 Main LangGraph definition for the document processing pipeline.
+
+Supports two architectures:
+1. Linear Pipeline (default=off): Sequential nodes with conditional routing
+2. Supervisor-Agent Architecture (default=on): Supervisor orchestrates specialized agents
 """
 
 import logging
@@ -18,6 +22,7 @@ from app.agents.nodes.extractor import extractor_node
 from app.agents.nodes.forgery import forgery_node
 from app.agents.nodes.scorer import scorer_node
 from app.agents.nodes.summary import summary_node
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -251,5 +256,11 @@ class DocumentProcessingPipeline:
         """
 
 
-# Create singleton instance
-pipeline = DocumentProcessingPipeline()
+# Dynamically choose pipeline based on config
+if settings.USE_SUPERVISOR_AGENTS:
+    logger.info("Using Supervisor-Agent architecture")
+    from app.agents.specialized.supervisor import SupervisorPipeline
+    pipeline = SupervisorPipeline()
+else:
+    logger.info("Using Linear Pipeline architecture")
+    pipeline = DocumentProcessingPipeline()

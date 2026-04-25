@@ -88,6 +88,19 @@ export const requestsApi = {
     const response = await api.delete(`/requests/${requestId}`);
     return response.data;
   },
+
+  /**
+   * Get summary statistics for dashboard
+   */
+  getStats: async (): Promise<{
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+  }> => {
+    const response = await api.get("/requests/stats/summary");
+    return response.data;
+  },
 };
 
 // Checker APIs
@@ -157,6 +170,36 @@ export const checkerApi = {
   ): Promise<{ message: string }> => {
     const response = await api.post(`/checker/release/${requestId}`, null, {
       params: { checker_id: checkerId },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get review history for a checker
+   */
+  getReviewHistory: async (
+    checkerId: string,
+    params?: { page?: number; limit?: number }
+  ): Promise<{
+    items: Array<{
+      request_id: string;
+      customer_id: string;
+      change_type: string;
+      document_type: string;
+      decision: string;
+      decision_reason: string | null;
+      decided_at: string;
+      reviewed_by: string;
+      ai_recommendation: string | null;
+      risk_tier: string | null;
+      overall_score: number | null;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+  }> => {
+    const response = await api.get("/checker/reviews", {
+      params: { checker_id: checkerId, ...params },
     });
     return response.data;
   },

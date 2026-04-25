@@ -74,7 +74,7 @@ async def seed_customers(session: AsyncSession):
             full_name="Sumeet Kumar",
             date_of_birth="1991-09-18",
             address="42 Sector 15, Gurgaon, Haryana 122001",
-            email="Sumeet.kumar@email.com",
+            email="sumeet.kumar@email.com",
             phone="+91-9876543215",
             account_number="1234567895",
             account_type="SAVINGS",

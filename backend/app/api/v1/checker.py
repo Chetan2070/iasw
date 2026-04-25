@@ -13,7 +13,7 @@ from sqlalchemy import select, func, and_
 from app.db.session import get_db
 from app.config import settings
 from app.models import (
-    PendingRequest, Customer, AuditLog,
+    Request, Customer, AuditLog,
     RequestStatus, RiskTier, Recommendation, Decision,
     ActorType, EventType
 )
@@ -52,18 +52,18 @@ async def get_queue(
     """
     # Build query - only show requests ready for review and not locked
     now = datetime.utcnow()
-    query = select(PendingRequest).where(
+    query = select(Request).where(
         and_(
-            PendingRequest.status == RequestStatus.AI_VERIFIED_PENDING_HUMAN,
+            Request.status == RequestStatus.AI_VERIFIED_PENDING_HUMAN,
             # Not locked OR lock has expired
-            (PendingRequest.checker_lock_until == None) | (PendingRequest.checker_lock_until < now)
+            (Request.checker_lock_until == None) | (Request.checker_lock_until < now)
         )
     )
 
     if risk_tier:
-        query = query.where(PendingRequest.risk_tier == risk_tier)
+        query = query.where(Request.risk_tier == risk_tier)
     if ai_recommendation:
-        query = query.where(PendingRequest.ai_recommendation == ai_recommendation)
+        query = query.where(Request.ai_recommendation == ai_recommendation)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -73,8 +73,8 @@ async def get_queue(
     # Order by risk tier (HIGH first) then by staged_at
     query = query.order_by(
         # HIGH = 0, MEDIUM = 1, LOW = 2 for sorting
-        PendingRequest.risk_tier.desc(),
-        PendingRequest.staged_at.asc()
+        Request.risk_tier.desc(),
+        Request.staged_at.asc()
     )
     query = query.offset((page - 1) * limit).limit(limit)
 
@@ -133,7 +133,7 @@ async def claim_request(
     """
     # 1. Check request exists
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -229,7 +229,7 @@ async def submit_decision(
     """
     # 1. Check request exists
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -391,7 +391,7 @@ async def release_request(
     """
     # 1. Check request exists
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -401,8 +401,8 @@ async def release_request(
             detail={"error": "request_not_found", "message": f"Request {request_id} not found"}
         )
 
-    # 2. Verify checker owns the lock
-    if request.assigned_checker != checker_id:
+    # 2. Verify checker owns the lock (allow if no checker assigned - already released)
+    if request.assigned_checker and request.assigned_checker != checker_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -411,13 +411,28 @@ async def release_request(
             }
         )
 
-    # 3. Release the request
+    # 3. Don't release if already decided/completed - just return success
+    terminal_statuses = [
+        RequestStatus.REJECTED,
+        RequestStatus.COMPLETED,
+        RequestStatus.APPROVED,
+        RequestStatus.ESCALATED,
+        RequestStatus.FAILED,
+    ]
+    if request.status in terminal_statuses or request.checker_decision is not None:
+        return ReleaseResponse(
+            request_id=request_id,
+            status=request.status.value,
+            message="Request already decided, no release needed."
+        )
+
+    # 4. Release the request
     previous_state = request.status.value
     request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN
     request.assigned_checker = None
     request.checker_lock_until = None
 
-    # 4. Create audit log
+    # 5. Create audit log
     audit = AuditLog.create(
         request_id=request_id,
         event_type=EventType.HUMAN_ACTION,
@@ -460,7 +475,7 @@ async def get_review_data(
     - Document reference
     """
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -513,4 +528,90 @@ async def get_review_data(
         created_at=request.created_at,
         staged_at=request.staged_at,
         claimed_at=request.claimed_at,
+        assigned_checker=request.assigned_checker,
+    )
+
+
+# Response model for review history
+from pydantic import BaseModel
+from typing import List
+
+
+class ReviewHistoryItem(BaseModel):
+    request_id: str
+    customer_id: str
+    change_type: str
+    document_type: str
+    decision: str
+    decision_reason: Optional[str]
+    decided_at: datetime
+    reviewed_by: str
+    ai_recommendation: Optional[str]
+    risk_tier: Optional[str]
+    overall_score: Optional[float]
+
+
+class ReviewHistoryResponse(BaseModel):
+    items: List[ReviewHistoryItem]
+    total: int
+    page: int
+    limit: int
+
+
+@router.get(
+    "/reviews",
+    response_model=ReviewHistoryResponse,
+)
+async def get_review_history(
+    checker_id: str = Query(..., description="Checker's ID to filter reviews"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get completed reviews for a specific checker.
+
+    Returns all requests that have been decided by the specified checker,
+    ordered by decision date (most recent first).
+    """
+    # Build query - get requests where this checker made a decision
+    query = select(Request).where(
+        and_(
+            Request.assigned_checker == checker_id,
+            Request.checker_decision.isnot(None)
+        )
+    ).order_by(Request.decided_at.desc())
+
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    # Apply pagination
+    query = query.offset((page - 1) * limit).limit(limit)
+    result = await db.execute(query)
+    requests = result.scalars().all()
+
+    # Convert to response
+    items = []
+    for req in requests:
+        items.append(ReviewHistoryItem(
+            request_id=req.request_id,
+            customer_id=req.customer_id,
+            change_type=req.change_type.value,
+            document_type=req.document_type.value,
+            decision=req.checker_decision.value if req.checker_decision else "UNKNOWN",
+            decision_reason=req.checker_decision_reason,
+            decided_at=req.decided_at,
+            reviewed_by=req.assigned_checker,
+            ai_recommendation=req.ai_recommendation.value if req.ai_recommendation else None,
+            risk_tier=req.risk_tier.value if req.risk_tier else None,
+            overall_score=float(req.overall_confidence) if req.overall_confidence else None,
+        ))
+
+    return ReviewHistoryResponse(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit
     )

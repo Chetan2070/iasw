@@ -99,6 +99,7 @@ export interface ReviewData {
   ai_summary: string | null;
   document_url: string | null;
   filenet_reference: string | null;
+  assigned_checker: string | null;
   created_at: string;
   staged_at: string | null;
   claimed_at: string | null;

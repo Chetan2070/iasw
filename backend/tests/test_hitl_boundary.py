@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.audit import AuditLog
 from app.models.enums import RequestStatus, RiskTier, Recommendation, Decision
 

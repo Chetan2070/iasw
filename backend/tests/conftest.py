@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import create_app
 from app.db.session import get_db
-from app.models.request import Base, PendingRequest
+from app.models.request import Base, Request
 from app.models.customer import Customer, Checker
 from app.models.audit import AuditLog
 from app.models.enums import (
@@ -123,9 +123,9 @@ async def sample_checker(test_session: AsyncSession) -> Checker:
 
 
 @pytest_asyncio.fixture
-async def sample_request(test_session: AsyncSession, sample_customer: Customer) -> PendingRequest:
+async def sample_request(test_session: AsyncSession, sample_customer: Customer) -> Request:
     """Create a sample pending request for testing."""
-    request = PendingRequest(
+    request = Request(
         request_id=str(uuid.uuid4()),
         customer_id=sample_customer.customer_id,
         change_type=ChangeType.LEGAL_NAME,
@@ -141,9 +141,9 @@ async def sample_request(test_session: AsyncSession, sample_customer: Customer) 
 
 
 @pytest_asyncio.fixture
-async def processed_request(test_session: AsyncSession, sample_customer: Customer) -> PendingRequest:
+async def processed_request(test_session: AsyncSession, sample_customer: Customer) -> Request:
     """Create a processed request ready for review."""
-    request = PendingRequest(
+    request = Request(
         request_id=str(uuid.uuid4()),
         customer_id=sample_customer.customer_id,
         change_type=ChangeType.LEGAL_NAME,
@@ -169,9 +169,9 @@ async def processed_request(test_session: AsyncSession, sample_customer: Custome
 
 
 @pytest_asyncio.fixture
-async def queued_request(test_session: AsyncSession, sample_customer: Customer) -> PendingRequest:
+async def queued_request(test_session: AsyncSession, sample_customer: Customer) -> Request:
     """Create a request in the queue."""
-    request = PendingRequest(
+    request = Request(
         request_id=str(uuid.uuid4()),
         customer_id=sample_customer.customer_id,
         change_type=ChangeType.ADDRESS,

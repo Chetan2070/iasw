@@ -17,7 +17,7 @@ from sqlalchemy import select, func
 from app.db.session import get_db
 from app.config import settings
 from app.models import (
-    PendingRequest, Customer, AuditLog,
+    Request, Customer, AuditLog,
     ChangeType, DocumentType, RequestStatus, ActorType, EventType,
     is_document_allowed
 )
@@ -108,10 +108,10 @@ async def create_request(
     # 3. Check for duplicate in-progress request
     logger.info(f"[INTAKE] Step 3: Checking for duplicate in-progress requests...")
     existing = await db.execute(
-        select(PendingRequest).where(
-            PendingRequest.customer_id == customer.customer_id,
-            PendingRequest.change_type == data.change_type,
-            PendingRequest.status.in_([
+        select(Request).where(
+            Request.customer_id == customer.customer_id,
+            Request.change_type == data.change_type,
+            Request.status.in_([
                 RequestStatus.INTAKE_RECEIVED,
                 RequestStatus.VALIDATED,
                 RequestStatus.QUEUED,
@@ -142,7 +142,7 @@ async def create_request(
 
     # 5. Create request record
     logger.info(f"[INTAKE] Step 5: Creating request record...")
-    request = PendingRequest(
+    request = Request(
         request_id=request_id,
         idempotency_key=idempotency_key,
         customer_id=customer.customer_id,
@@ -209,7 +209,7 @@ async def upload_document(
     # 1. Check request exists
     logger.info(f"[UPLOAD] Step 1: Verifying request {request_id} exists...")
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -357,14 +357,14 @@ async def list_requests(
     - limit: Items per page (default: 20, max: 100)
     """
     # Build query
-    query = select(PendingRequest)
+    query = select(Request)
 
     if customer_id:
-        query = query.where(PendingRequest.customer_id == customer_id)
+        query = query.where(Request.customer_id == customer_id)
     if change_type:
-        query = query.where(PendingRequest.change_type == change_type)
+        query = query.where(Request.change_type == change_type)
     if status_filter:
-        query = query.where(PendingRequest.status == status_filter)
+        query = query.where(Request.status == status_filter)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -372,7 +372,7 @@ async def list_requests(
     total = total.scalar()
 
     # Apply pagination
-    query = query.order_by(PendingRequest.created_at.desc())
+    query = query.order_by(Request.created_at.desc())
     query = query.offset((page - 1) * limit).limit(limit)
 
     result = await db.execute(query)
@@ -403,6 +403,57 @@ async def list_requests(
     )
 
 
+@router.get("/stats/summary")
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Get summary statistics for all requests.
+
+    Returns counts by status category for dashboard display.
+    """
+    # Total count
+    total_result = await db.execute(select(func.count()).select_from(Request))
+    total = total_result.scalar() or 0
+
+    # Pending (not in terminal state)
+    pending_statuses = [
+        RequestStatus.INTAKE_RECEIVED,
+        RequestStatus.VALIDATED,
+        RequestStatus.QUEUED,
+        RequestStatus.PROCESSING,
+        RequestStatus.AI_VERIFIED_PENDING_HUMAN,
+        RequestStatus.IN_REVIEW,
+        RequestStatus.PENDING_INFO,
+        RequestStatus.ESCALATED,
+    ]
+    pending_result = await db.execute(
+        select(func.count()).select_from(Request).where(Request.status.in_(pending_statuses))
+    )
+    pending = pending_result.scalar() or 0
+
+    # Approved (APPROVED or COMPLETED)
+    approved_result = await db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.status.in_([RequestStatus.APPROVED, RequestStatus.COMPLETED])
+        )
+    )
+    approved = approved_result.scalar() or 0
+
+    # Rejected (REJECTED or FAILED)
+    rejected_result = await db.execute(
+        select(func.count()).select_from(Request).where(
+            Request.status.in_([RequestStatus.REJECTED, RequestStatus.FAILED])
+        )
+    )
+    rejected = rejected_result.scalar() or 0
+
+    return {
+        "total": total,
+        "pending": pending,
+        "approved": approved,
+        "rejected": rejected,
+    }
+
+
 @router.get(
     "/{request_id}",
     response_model=RequestDetail,
@@ -426,7 +477,7 @@ async def get_request(
     - Current status and timestamps
     """
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 
@@ -452,13 +503,19 @@ async def get_request(
     forgery = None
     if request.forgery_result:
         details = request.forgery_details or {}
+        # Extract scores from nested dicts (format: {'score': 0.9, 'details': {...}})
+        def get_layer_score(layer_data):
+            if isinstance(layer_data, dict):
+                return float(layer_data.get("score", 0)) if layer_data.get("score") is not None else None
+            return float(layer_data) if layer_data is not None else None
+
         forgery = ForgeryDetail(
             score=float(request.forgery_score) if request.forgery_score else 0,
             result=request.forgery_result,
-            metadata_score=details.get("metadata"),
-            ela_score=details.get("ela"),
-            font_score=details.get("font"),
-            ml_score=details.get("ml"),
+            metadata_score=get_layer_score(details.get("metadata")),
+            ela_score=get_layer_score(details.get("ela")),
+            font_score=get_layer_score(details.get("font")),
+            ml_score=get_layer_score(details.get("ml")),
         )
 
     # Build extraction details
@@ -500,6 +557,7 @@ async def get_request(
         filenet_staging_id=request.filenet_staging_id,
         filenet_permanent_id=request.filenet_permanent_id,
         status=request.status,
+        current_processing_step=request.current_processing_step,
         assigned_checker=request.assigned_checker,
         checker_decision=request.checker_decision,
         checker_decision_reason=request.checker_decision_reason,
@@ -538,7 +596,7 @@ async def delete_request(
 
     # Find the request
     request = await db.execute(
-        select(PendingRequest).where(PendingRequest.request_id == request_id)
+        select(Request).where(Request.request_id == request_id)
     )
     request = request.scalar_one_or_none()
 

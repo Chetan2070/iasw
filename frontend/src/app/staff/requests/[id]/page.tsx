@@ -65,6 +65,7 @@ interface RequestDetail {
   filenet_staging_id: string | null;
   filenet_permanent_id: string | null;
   status: RequestStatus;
+  current_processing_step: string | null;
   assigned_checker: string | null;
   checker_decision: string | null;
   checker_decision_reason: string | null;
@@ -133,7 +134,9 @@ export default function RequestDetailPage() {
         const data = await requestsApi.get(requestId);
         setRequest(data as unknown as RequestDetail);
       } catch (err: any) {
-        setError(err.response?.data?.detail?.message || "Failed to load request");
+        const detail = err.response?.data?.detail;
+        const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to load request";
+        setError(errorMsg);
       } finally {
         setLoading(false);
       }
@@ -148,8 +151,8 @@ export default function RequestDetailPage() {
         const req = data as unknown as RequestDetail;
         setRequest(req);
 
-        // Stop polling if request is in a terminal state
-        if (["COMPLETED", "FAILED", "REJECTED", "APPROVED", "AI_VERIFIED_PENDING_HUMAN", "IN_REVIEW"].includes(req.status)) {
+        // Stop polling only if request is in a truly terminal state
+        if (["COMPLETED", "FAILED", "REJECTED"].includes(req.status)) {
           clearInterval(interval);
         }
       } catch (err) {
@@ -170,7 +173,9 @@ export default function RequestDetailPage() {
       await requestsApi.delete(requestId);
       router.push("/staff/requests");
     } catch (err: any) {
-      alert(err.response?.data?.detail?.message || "Failed to delete request");
+      const detail = err.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to delete request";
+      alert(errorMsg);
     } finally {
       setDeleting(false);
     }
@@ -182,9 +187,16 @@ export default function RequestDetailPage() {
     const currentOrder = STATUS_ORDER[request.status] ?? -1;
     const stageOrder = STATUS_ORDER[stageKey] ?? -1;
 
+    // Handle terminal failure states
     if (request.status === "FAILED" || request.status === "REJECTED") {
       if (stageKey === request.status) return "failed";
       if (stageOrder < currentOrder) return "completed";
+      return "pending";
+    }
+
+    // Handle terminal success states - COMPLETED and APPROVED should show as completed
+    if (request.status === "COMPLETED" || request.status === "APPROVED") {
+      if (stageOrder <= currentOrder) return "completed";
       return "pending";
     }
 
@@ -313,28 +325,44 @@ export default function RequestDetailPage() {
                           AI Pipeline Steps
                         </p>
                         {PROCESSING_SUBSTEPS.map((substep, subIndex) => {
-                          const isSubstepComplete = status === "completed";
-                          const isLastSubstep = subIndex === PROCESSING_SUBSTEPS.length - 1;
+                          // Determine substep status based on current_processing_step from API
+                          const processingComplete = status === "completed";
+                          const currentStepKey = request?.current_processing_step || "";
+                          const currentStepIndex = PROCESSING_SUBSTEPS.findIndex(s => s.key === currentStepKey);
+
+                          let substepStatus: "completed" | "current" | "pending" = "pending";
+                          if (processingComplete) {
+                            substepStatus = "completed";
+                          } else if (currentStepIndex >= 0) {
+                            if (subIndex < currentStepIndex) {
+                              substepStatus = "completed";
+                            } else if (subIndex === currentStepIndex) {
+                              substepStatus = "current";
+                            }
+                          }
 
                           return (
                             <div key={substep.key} className="flex items-start gap-2">
-                              {isSubstepComplete ? (
+                              {substepStatus === "completed" ? (
                                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                              ) : status === "current" ? (
-                                <Clock className="h-4 w-4 text-blue-500 animate-pulse mt-0.5 flex-shrink-0" />
+                              ) : substepStatus === "current" ? (
+                                <Loader2 className="h-4 w-4 text-blue-500 animate-spin mt-0.5 flex-shrink-0" />
                               ) : (
                                 <div className="h-4 w-4 rounded-full border border-gray-300 mt-0.5 flex-shrink-0" />
                               )}
                               <div>
                                 <p className={cn(
                                   "text-sm font-medium",
-                                  isSubstepComplete ? "text-green-700" : status === "current" ? "text-blue-700" : "text-gray-400"
+                                  substepStatus === "completed" ? "text-green-700" : substepStatus === "current" ? "text-blue-700" : "text-gray-400"
                                 )}>
                                   {substep.label}
+                                  {substepStatus === "current" && (
+                                    <span className="ml-2 text-xs text-blue-500 font-normal">Running...</span>
+                                  )}
                                 </p>
                                 <p className={cn(
                                   "text-xs",
-                                  isSubstepComplete ? "text-gray-500" : "text-gray-400"
+                                  substepStatus === "completed" ? "text-gray-500" : substepStatus === "current" ? "text-blue-500" : "text-gray-400"
                                 )}>
                                   {substep.description}
                                 </p>

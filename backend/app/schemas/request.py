@@ -184,6 +184,7 @@ class RequestDetail(BaseModel):
 
     # Workflow status
     status: RequestStatus
+    current_processing_step: Optional[str] = None
     assigned_checker: Optional[str] = None
     checker_decision: Optional[Decision] = None
     checker_decision_reason: Optional[str] = None

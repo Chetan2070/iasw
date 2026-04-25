@@ -1,9 +1,0 @@
-{
-  "/staff/requests/page": "app/staff/requests/page.js",
-  "/staff/requests/[id]/page": "app/staff/requests/[id]/page.js",
-  "/checker/review/[requestId]/page": "app/checker/review/[requestId]/page.js",
-  "/checker/reviews/page": "app/checker/reviews/page.js",
-  "/staff/page": "app/staff/page.js",
-  "/checker/queue/page": "app/checker/queue/page.js",
-  "/checker/page": "app/checker/page.js"
-}

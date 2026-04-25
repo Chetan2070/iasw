@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.customer import Customer, Checker
 from app.models.audit import AuditLog
 from app.models.enums import (
@@ -21,13 +21,13 @@ from app.models.enums import (
 )
 
 
-class TestPendingRequestModel:
-    """Tests for PendingRequest model."""
+class TestRequestModel:
+    """Tests for Request model."""
 
     @pytest.mark.asyncio
     async def test_create_pending_request(self, test_session: AsyncSession):
         """Test creating a pending request."""
-        request = PendingRequest(
+        request = Request(
             request_id=str(uuid.uuid4()),
             customer_id="CUST-001",
             change_type=ChangeType.LEGAL_NAME,

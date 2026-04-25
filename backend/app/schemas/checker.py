@@ -211,3 +211,4 @@ class ReviewData(BaseModel):
     created_at: datetime
     staged_at: Optional[datetime] = None
     claimed_at: Optional[datetime] = None
+    assigned_checker: Optional[str] = None

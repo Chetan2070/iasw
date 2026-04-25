@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ClipboardList, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { ClipboardList, CheckCircle, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { checkerApi } from "@/lib/api";
 import { QueueItem } from "@/types";
+import { usePolling } from "@/hooks/usePolling";
 
 export default function CheckerDashboard() {
   const [queueStats, setQueueStats] = useState({
@@ -15,27 +16,26 @@ export default function CheckerDashboard() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const response = await checkerApi.getQueue({ limit: 1000 });
-        const items = response.items;
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await checkerApi.getQueue({ limit: 1000 });
+      const items = response.items;
 
-        setQueueStats({
-          total: items.length,
-          high: items.filter((i) => i.risk_tier === "HIGH").length,
-          medium: items.filter((i) => i.risk_tier === "MEDIUM").length,
-          low: items.filter((i) => i.risk_tier === "LOW").length,
-        });
-      } catch (error) {
-        console.error("Failed to fetch queue stats:", error);
-      } finally {
-        setLoading(false);
-      }
+      setQueueStats({
+        total: items.length,
+        high: items.filter((i) => i.risk_tier === "HIGH").length,
+        medium: items.filter((i) => i.risk_tier === "MEDIUM").length,
+        low: items.filter((i) => i.risk_tier === "LOW").length,
+      });
+    } catch (error) {
+      console.error("Failed to fetch queue stats:", error);
+    } finally {
+      setLoading(false);
     }
-
-    fetchStats();
   }, []);
+
+  // Auto-refresh every 10 seconds
+  usePolling(fetchStats, 10000);
 
   return (
     <div className="space-y-6">

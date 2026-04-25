@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.enums import RequestStatus, RiskTier, Recommendation
 
 
@@ -52,7 +52,7 @@ class TestCompleteRequestFlow:
         from sqlalchemy import select
 
         result = await test_session.execute(
-            select(PendingRequest).where(PendingRequest.request_id == request_id)
+            select(Request).where(Request.request_id == request_id)
         )
         request = result.scalar_one()
         request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN
@@ -129,7 +129,7 @@ class TestCompleteRequestFlow:
         from sqlalchemy import select
 
         result = await test_session.execute(
-            select(PendingRequest).where(PendingRequest.request_id == request_id)
+            select(Request).where(Request.request_id == request_id)
         )
         request = result.scalar_one()
         request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN
@@ -186,7 +186,7 @@ class TestCompleteRequestFlow:
         from sqlalchemy import select
 
         result = await test_session.execute(
-            select(PendingRequest).where(PendingRequest.request_id == request_id)
+            select(Request).where(Request.request_id == request_id)
         )
         request = result.scalar_one()
         request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN
@@ -241,7 +241,7 @@ class TestCompleteRequestFlow:
         from sqlalchemy import select
 
         result = await test_session.execute(
-            select(PendingRequest).where(PendingRequest.request_id == request_id)
+            select(Request).where(Request.request_id == request_id)
         )
         request = result.scalar_one()
         request.status = RequestStatus.AI_VERIFIED_PENDING_HUMAN

@@ -1,1 +1,30 @@
+# Environment
 .env
+
+# Python
+__pycache__
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Storage (uploaded files)
+storage/uploads/
+storage/staging/
+storage/approved/
+storage/rejected/

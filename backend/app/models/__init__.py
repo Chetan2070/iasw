@@ -4,7 +4,7 @@ from app.models.enums import (
     ForgeryResult, Recommendation, Decision, ActorType, EventType,
     ALLOWED_DOCUMENTS, is_document_allowed
 )
-from app.models.request import PendingRequest
+from app.models.request import Request
 from app.models.audit import AuditLog
 from app.models.customer import Customer, Checker
 
@@ -22,7 +22,7 @@ __all__ = [
     "ALLOWED_DOCUMENTS",
     "is_document_allowed",
     # Models
-    "PendingRequest",
+    "Request",
     "AuditLog",
     "Customer",
     "Checker",

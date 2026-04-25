@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle,
@@ -9,11 +9,11 @@ import {
   AlertTriangle,
   FileText,
   User,
-  Calendar,
   Shield,
   Eye,
   MessageSquare,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { checkerApi } from "@/lib/api";
 import {
@@ -25,13 +25,15 @@ import {
   RECOMMENDATION_COLORS,
 } from "@/types";
 import { cn, formatPercentage, formatDate } from "@/lib/utils";
-
-const CHECKER_ID = "CHK-001";
+import { useChecker } from "@/contexts/CheckerContext";
 
 export default function ReviewPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  const { checkerId } = useChecker();
   const requestId = params.requestId as string;
+  const readonly = searchParams.get("readonly") === "true";
 
   const [reviewData, setReviewData] = useState<ReviewData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,21 +42,75 @@ export default function ReviewPage() {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // Use ref to track reviewData for cleanup without causing re-renders
+  const reviewDataRef = useRef<ReviewData | null>(null);
   useEffect(() => {
+    reviewDataRef.current = reviewData;
+  }, [reviewData]);
+
+  // Fetch review data once on mount
+  useEffect(() => {
+    let cancelled = false;
+
     async function fetchReviewData() {
       try {
         const data = await checkerApi.getReviewData(requestId);
-        setReviewData(data);
+        if (!cancelled) {
+          setReviewData(data);
+        }
       } catch (err: any) {
-        console.error("Failed to fetch review data:", err);
-        setError(err.response?.data?.detail || "Failed to load review data");
+        if (!cancelled) {
+          console.error("Failed to fetch review data:", err);
+          const detail = err.response?.data?.detail;
+          const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to load review data";
+          setError(errorMsg);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     fetchReviewData();
-  }, [requestId]);
+
+    // Release request when component unmounts (user navigates away)
+    return () => {
+      cancelled = true;
+      if (!readonly && reviewDataRef.current?.assigned_checker === checkerId) {
+        checkerApi.release(requestId, checkerId).catch((err) => {
+          console.error("Failed to release on exit:", err);
+        });
+      }
+    };
+  }, [requestId, readonly, checkerId]);
+
+  // Handle browser close / page unload
+  useEffect(() => {
+    if (readonly) return;
+
+    const handleBeforeUnload = () => {
+      // Use navigator.sendBeacon for reliable request on page unload
+      const url = `/api/v1/checker/release/${requestId}?checker_id=${checkerId}`;
+      navigator.sendBeacon(url);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [readonly, requestId, checkerId]);
+
+  const handleBack = async () => {
+    if (!readonly) {
+      try {
+        await checkerApi.release(requestId, checkerId);
+      } catch (err) {
+        console.error("Failed to release:", err);
+      }
+    }
+    router.push(readonly ? "/checker/reviews" : "/checker/queue");
+  };
 
   const handleDecision = async () => {
     if (!decision) {
@@ -69,14 +125,16 @@ export default function ReviewPage() {
 
     setSubmitting(true);
     try {
-      await checkerApi.submitDecision(requestId, CHECKER_ID, {
+      await checkerApi.submitDecision(requestId, checkerId, {
         decision,
         reason: reason.trim() || undefined,
       });
       router.push("/checker/queue");
     } catch (err: any) {
       console.error("Failed to submit decision:", err);
-      alert(err.response?.data?.detail || "Failed to submit decision");
+      const detail = err.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to submit decision";
+      alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -85,11 +143,13 @@ export default function ReviewPage() {
   const handleRelease = async () => {
     if (confirm("Release this request back to the queue?")) {
       try {
-        await checkerApi.release(requestId, CHECKER_ID);
+        await checkerApi.release(requestId, checkerId);
         router.push("/checker/queue");
       } catch (err: any) {
         console.error("Failed to release:", err);
-        alert(err.response?.data?.detail || "Failed to release request");
+        const detail = err.response?.data?.detail;
+        const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to release request";
+        alert(errorMsg);
       }
     }
   };
@@ -133,22 +193,39 @@ export default function ReviewPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push("/checker/queue")}
+            onClick={handleBack}
             className="p-2 hover:bg-gray-100 rounded-lg"
           >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Review Request</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {readonly ? "Review Details" : "Review Request"}
+              </h1>
+              {readonly && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
+                  <Lock className="h-3 w-3" />
+                  Read Only
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500">ID: {requestId}</p>
+            {readonly && reviewData?.assigned_checker && (
+              <p className="text-sm text-gray-500">
+                Reviewed by: <span className="font-medium">{reviewData.assigned_checker}</span>
+              </p>
+            )}
           </div>
         </div>
-        <button
-          onClick={handleRelease}
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
-          Release to Queue
-        </button>
+        {!readonly && (
+          <button
+            onClick={handleRelease}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Release to Queue
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -268,14 +345,14 @@ export default function ReviewPage() {
                 <div
                   className={cn(
                     "text-3xl font-bold",
-                    reviewData.forgery_score < 0.3
+                    reviewData.forgery_score >= 0.8
                       ? "text-green-600"
-                      : reviewData.forgery_score < 0.6
+                      : reviewData.forgery_score >= 0.6
                       ? "text-yellow-600"
                       : "text-red-600"
                   )}
                 >
-                  {formatPercentage(1 - reviewData.forgery_score)}
+                  {formatPercentage(reviewData.forgery_score)}
                 </div>
                 <div>
                   <p className="font-medium">Authenticity Score</p>
@@ -285,19 +362,79 @@ export default function ReviewPage() {
                 </div>
               </div>
               {reviewData.forgery_details && (
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(reviewData.forgery_details).map(
-                    ([key, value]) => (
-                      <div key={key} className="p-2 bg-gray-50 rounded text-sm">
-                        <span className="text-gray-500">{key}: </span>
-                        <span className="font-medium">
-                          {typeof value === "number"
-                            ? formatPercentage(value)
-                            : String(value)}
-                        </span>
-                      </div>
-                    )
+                <div className="space-y-4">
+                  {/* Assessment summary */}
+                  {reviewData.forgery_details.combined?.assessment && (
+                    <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
+                      {reviewData.forgery_details.combined.assessment}
+                    </p>
                   )}
+
+                  {/* Layer scores and explanations */}
+                  <div className="space-y-3">
+                    {/* Metadata Layer */}
+                    {reviewData.forgery_details.metadata && (
+                      <div className="border-l-2 border-blue-400 pl-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-sm">Metadata Analysis</span>
+                          <span className={cn(
+                            "text-sm font-medium",
+                            reviewData.forgery_details.metadata.score >= 0.8 ? "text-green-600" :
+                            reviewData.forgery_details.metadata.score >= 0.6 ? "text-yellow-600" : "text-red-600"
+                          )}>
+                            {formatPercentage(reviewData.forgery_details.metadata.score)}
+                          </span>
+                        </div>
+                        {reviewData.forgery_details.combined?.layer_explanations?.metadata && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {reviewData.forgery_details.combined.layer_explanations.metadata}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ELA Layer */}
+                    {reviewData.forgery_details.ela && (
+                      <div className="border-l-2 border-purple-400 pl-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-sm">Error Level Analysis</span>
+                          <span className={cn(
+                            "text-sm font-medium",
+                            reviewData.forgery_details.ela.score >= 0.8 ? "text-green-600" :
+                            reviewData.forgery_details.ela.score >= 0.6 ? "text-yellow-600" : "text-red-600"
+                          )}>
+                            {formatPercentage(reviewData.forgery_details.ela.score)}
+                          </span>
+                        </div>
+                        {reviewData.forgery_details.combined?.layer_explanations?.ela && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {reviewData.forgery_details.combined.layer_explanations.ela}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Font Layer */}
+                    {reviewData.forgery_details.font && (
+                      <div className="border-l-2 border-orange-400 pl-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-sm">Font Consistency</span>
+                          <span className={cn(
+                            "text-sm font-medium",
+                            reviewData.forgery_details.font.score >= 0.8 ? "text-green-600" :
+                            reviewData.forgery_details.font.score >= 0.6 ? "text-yellow-600" : "text-red-600"
+                          )}>
+                            {formatPercentage(reviewData.forgery_details.font.score)}
+                          </span>
+                        </div>
+                        {reviewData.forgery_details.combined?.layer_explanations?.font && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {reviewData.forgery_details.combined.layer_explanations.font}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -438,99 +575,101 @@ export default function ReviewPage() {
             )}
           </div>
 
-          {/* Decision Panel */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Your Decision
-            </h2>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setDecision("APPROVE")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
-                    decision === "APPROVE"
-                      ? "border-green-500 bg-green-50 text-green-700"
-                      : "border-gray-200 hover:border-green-300"
-                  )}
-                >
-                  <CheckCircle className="h-5 w-5" />
-                  Approve
-                </button>
-                <button
-                  onClick={() => setDecision("REJECT")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
-                    decision === "REJECT"
-                      ? "border-red-500 bg-red-50 text-red-700"
-                      : "border-gray-200 hover:border-red-300"
-                  )}
-                >
-                  <XCircle className="h-5 w-5" />
-                  Reject
-                </button>
-                <button
-                  onClick={() => setDecision("MORE_INFO")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
-                    decision === "MORE_INFO"
-                      ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                      : "border-gray-200 hover:border-yellow-300"
-                  )}
-                >
-                  <Eye className="h-5 w-5" />
-                  More Info
-                </button>
-                <button
-                  onClick={() => setDecision("ESCALATE")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
-                    decision === "ESCALATE"
-                      ? "border-purple-500 bg-purple-50 text-purple-700"
-                      : "border-gray-200 hover:border-purple-300"
-                  )}
-                >
-                  <AlertTriangle className="h-5 w-5" />
-                  Escalate
-                </button>
-              </div>
-
-              {decision && decision !== "APPROVE" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reason <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="Provide reason for your decision..."
-                  />
+          {/* Decision Panel - only show if not readonly */}
+          {!readonly && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Your Decision
+              </h2>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setDecision("APPROVE")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
+                      decision === "APPROVE"
+                        ? "border-green-500 bg-green-50 text-green-700"
+                        : "border-gray-200 hover:border-green-300"
+                    )}
+                  >
+                    <CheckCircle className="h-5 w-5" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => setDecision("REJECT")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
+                      decision === "REJECT"
+                        ? "border-red-500 bg-red-50 text-red-700"
+                        : "border-gray-200 hover:border-red-300"
+                    )}
+                  >
+                    <XCircle className="h-5 w-5" />
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => setDecision("MORE_INFO")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
+                      decision === "MORE_INFO"
+                        ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                        : "border-gray-200 hover:border-yellow-300"
+                    )}
+                  >
+                    <Eye className="h-5 w-5" />
+                    More Info
+                  </button>
+                  <button
+                    onClick={() => setDecision("ESCALATE")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors",
+                      decision === "ESCALATE"
+                        ? "border-purple-500 bg-purple-50 text-purple-700"
+                        : "border-gray-200 hover:border-purple-300"
+                    )}
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                    Escalate
+                  </button>
                 </div>
-              )}
 
-              <button
-                onClick={handleDecision}
-                disabled={!decision || submitting}
-                className={cn(
-                  "w-full py-3 rounded-lg font-medium transition-colors",
-                  !decision || submitting
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700"
+                {decision && decision !== "APPROVE" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Provide reason for your decision..."
+                    />
+                  </div>
                 )}
-              >
-                {submitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Submitting...
-                  </span>
-                ) : (
-                  "Submit Decision"
+
+                <button
+                  onClick={handleDecision}
+                  disabled={!decision || submitting}
+                  className={cn(
+                    "w-full py-3 rounded-lg font-medium transition-colors",
+                    !decision || submitting
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  )}
+                >
+                  {submitting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Submitting...
+                    </span>
+                  ) : (
+                    "Submit Decision"
                 )}
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

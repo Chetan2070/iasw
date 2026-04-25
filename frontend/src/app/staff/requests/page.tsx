@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Filter, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Search, Filter, ChevronLeft, ChevronRight, Trash2, RefreshCw } from "lucide-react";
 import { requestsApi } from "@/lib/api";
 import {
   RequestSummary,
@@ -14,6 +14,7 @@ import {
   RISK_TIER_COLORS,
 } from "@/types";
 import { cn, formatDate, formatPercentage } from "@/lib/utils";
+import { usePolling } from "@/hooks/usePolling";
 
 export default function RequestsListPage() {
   const router = useRouter();
@@ -28,8 +29,7 @@ export default function RequestsListPage() {
     customer_id: "",
   });
 
-  const fetchRequests = async () => {
-    setLoading(true);
+  const fetchRequests = useCallback(async () => {
     try {
       const params: Record<string, any> = { page, limit: 10 };
       if (filters.change_type) params.change_type = filters.change_type;
@@ -44,11 +44,10 @@ export default function RequestsListPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchRequests();
   }, [page, filters]);
+
+  // Auto-refresh every 5 seconds
+  usePolling(fetchRequests, 5000);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
