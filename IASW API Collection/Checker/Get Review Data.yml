@@ -1,0 +1,19 @@
+info:
+  name: Get Review Data
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{base_url}}/checker/review/REQ-XXXXXXXX"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Get complete review data for the checker UI including request details, extracted values, confidence scores, forgery detection, AI recommendation.

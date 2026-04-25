@@ -15,17 +15,19 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 
 from app.agents.state import ProcessingState, create_initial_state
+from app.agents.prompts import (
+    OCR_AGENT_PROMPT,
+    CLASSIFIER_AGENT_PROMPT,
+    EXTRACTOR_AGENT_PROMPT,
+    FORGERY_AGENT_PROMPT,
+    SCORER_AGENT_PROMPT,
+)
 from app.agents.specialized.worker_agents import (
     create_ocr_agent,
     create_classifier_agent,
     create_extractor_agent,
     create_forgery_agent,
     create_scorer_agent,
-    OCR_AGENT_PROMPT,
-    CLASSIFIER_AGENT_PROMPT,
-    EXTRACTOR_AGENT_PROMPT,
-    FORGERY_AGENT_PROMPT,
-    SCORER_AGENT_PROMPT,
 )
 from app.config import settings
 

@@ -1,0 +1,23 @@
+info:
+  name: Release Request
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{base_url}}/checker/release/REQ-XXXXXXXX?checker_id=chk-001"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+  params:
+    - name: checker_id
+      value: chk-001
+      type: query
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Release a claimed request back to the queue.

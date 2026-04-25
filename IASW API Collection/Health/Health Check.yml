@@ -1,0 +1,16 @@
+info:
+  name: Health Check
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{base_url}}/health"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Check the health of the application and its dependencies (database, Redis).

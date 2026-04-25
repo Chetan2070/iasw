@@ -1,0 +1,30 @@
+info:
+  name: Upload Document
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{base_url}}/requests/REQ-XXXXXXXX/upload"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+  body:
+    type: multipart-form
+    data:
+      - name: file
+        type: file
+        value:
+          - /path/to/document.pdf
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Upload a supporting document for a request.
+
+  Supported File Types: PDF, JPEG, PNG, TIFF
+  Max File Size: 10 MB

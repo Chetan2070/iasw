@@ -14,6 +14,9 @@ import {
   Calendar,
   Trash2,
   Loader2,
+  Brain,
+  Shield,
+  ChevronRight,
 } from "lucide-react";
 import { requestsApi } from "@/lib/api";
 import {
@@ -21,9 +24,13 @@ import {
   STATUS_LABELS,
   CHANGE_TYPE_LABELS,
   DOCUMENT_TYPE_LABELS,
-  RISK_TIER_COLORS,
 } from "@/types";
 import { cn, formatDate } from "@/lib/utils";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge, StatusBadge, RiskBadge } from "@/components/ui/Badge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 
 interface RequestDetail {
   request_id: string;
@@ -94,13 +101,13 @@ const WORKFLOW_STAGES = [
 ];
 
 const PROCESSING_SUBSTEPS = [
-  { key: "validation", label: "Document Validation", description: "Verifying document exists and is readable" },
-  { key: "ocr", label: "OCR Extraction", description: "Extracting text from document using Tesseract" },
-  { key: "classifier", label: "Document Classification", description: "LLM classifying document type" },
-  { key: "extractor", label: "Field Extraction", description: "LLM extracting names, dates, and other fields" },
-  { key: "forgery", label: "Forgery Detection", description: "Analyzing for tampering (metadata, ELA, fonts)" },
-  { key: "scorer", label: "Confidence Scoring", description: "Calculating match scores and risk tier" },
-  { key: "summary", label: "Summary Generation", description: "LLM generating human-readable summary" },
+  { key: "validation", label: "Document Validation", description: "Verifying document exists" },
+  { key: "ocr", label: "OCR Extraction", description: "Extracting text via Tesseract" },
+  { key: "classifier", label: "Classification", description: "LLM classifying document type" },
+  { key: "extractor", label: "Field Extraction", description: "LLM extracting fields" },
+  { key: "forgery", label: "Forgery Detection", description: "Analyzing for tampering" },
+  { key: "scorer", label: "Confidence Scoring", description: "Calculating risk tier" },
+  { key: "summary", label: "Summary Generation", description: "Generating summary" },
 ];
 
 const STATUS_ORDER: Record<string, number> = {
@@ -121,6 +128,7 @@ const STATUS_ORDER: Record<string, number> = {
 export default function RequestDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { success, error: showError } = useToast();
   const requestId = params.id as string;
 
   const [request, setRequest] = useState<RequestDetail | null>(null);
@@ -135,7 +143,7 @@ export default function RequestDetailPage() {
         setRequest(data as unknown as RequestDetail);
       } catch (err: any) {
         const detail = err.response?.data?.detail;
-        const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to load request";
+        const errorMsg = typeof detail === "string" ? detail : detail?.message || "Failed to load request";
         setError(errorMsg);
       } finally {
         setLoading(false);
@@ -144,14 +152,12 @@ export default function RequestDetailPage() {
 
     fetchRequest();
 
-    // Auto-refresh every 3 seconds if status is still processing
     const interval = setInterval(async () => {
       try {
         const data = await requestsApi.get(requestId);
         const req = data as unknown as RequestDetail;
         setRequest(req);
 
-        // Stop polling only if request is in a truly terminal state
         if (["COMPLETED", "FAILED", "REJECTED"].includes(req.status)) {
           clearInterval(interval);
         }
@@ -164,18 +170,19 @@ export default function RequestDetailPage() {
   }, [requestId]);
 
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete request ${requestId}?`)) {
+    if (!confirm(`Are you sure you want to delete this request?`)) {
       return;
     }
 
     setDeleting(true);
     try {
       await requestsApi.delete(requestId);
+      success("Request deleted", "The request has been removed.");
       router.push("/staff/requests");
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      const errorMsg = typeof detail === 'string' ? detail : detail?.message || "Failed to delete request";
-      alert(errorMsg);
+      const errorMsg = typeof detail === "string" ? detail : detail?.message || "Failed to delete request";
+      showError("Delete failed", errorMsg);
     } finally {
       setDeleting(false);
     }
@@ -187,14 +194,12 @@ export default function RequestDetailPage() {
     const currentOrder = STATUS_ORDER[request.status] ?? -1;
     const stageOrder = STATUS_ORDER[stageKey] ?? -1;
 
-    // Handle terminal failure states
     if (request.status === "FAILED" || request.status === "REJECTED") {
       if (stageKey === request.status) return "failed";
       if (stageOrder < currentOrder) return "completed";
       return "pending";
     }
 
-    // Handle terminal success states - COMPLETED and APPROVED should show as completed
     if (request.status === "COMPLETED" || request.status === "APPROVED") {
       if (stageOrder <= currentOrder) return "completed";
       return "pending";
@@ -208,20 +213,37 @@ export default function RequestDetailPage() {
   const getStageIcon = (status: string) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="h-6 w-6 text-green-600" />;
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
       case "current":
-        return <Clock className="h-6 w-6 text-blue-600 animate-pulse" />;
+        return (
+          <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center">
+            <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
+          </div>
+        );
       case "failed":
-        return <XCircle className="h-6 w-6 text-red-600" />;
+        return <XCircle className="h-5 w-5 text-red-600" />;
       default:
-        return <div className="h-6 w-6 rounded-full border-2 border-gray-300" />;
+        return <div className="h-5 w-5 rounded-full border-2 border-gray-300 bg-white" />;
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <Card>
+          <Skeleton className="h-64 w-full" />
+        </Card>
+        <div className="grid grid-cols-2 gap-6">
+          <Card><Skeleton className="h-48 w-full" /></Card>
+          <Card><Skeleton className="h-48 w-full" /></Card>
+        </div>
       </div>
     );
   }
@@ -229,18 +251,16 @@ export default function RequestDetailPage() {
   if (error || !request) {
     return (
       <div className="max-w-4xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <Card className="bg-red-50 border-red-200 text-center py-12">
           <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Request</h2>
-          <p className="text-red-600 mb-4">{error || "Request not found"}</p>
-          <Link
-            href="/staff/requests"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Requests
+          <p className="text-red-600 mb-6">{error || "Request not found"}</p>
+          <Link href="/staff/requests">
+            <Button variant="outline" icon={<ArrowLeft className="h-4 w-4" />}>
+              Back to Requests
+            </Button>
           </Link>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -250,51 +270,56 @@ export default function RequestDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            href="/staff/requests"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
+          <Link href="/staff/requests">
+            <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{request.request_id}</h1>
-            <p className="text-sm text-gray-500">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {request.request_id.slice(0, 12)}...
+              </h1>
+              <StatusBadge status={request.status} size="md" />
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
               Created {formatDate(request.created_at)}
             </p>
           </div>
         </div>
-        <button
+        <Button
+          variant="ghost"
           onClick={handleDelete}
-          disabled={deleting}
-          className="inline-flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+          loading={deleting}
+          icon={<Trash2 className="h-4 w-4" />}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
         >
-          <Trash2 className={cn("h-4 w-4", deleting && "animate-pulse")} />
-          {deleting ? "Deleting..." : "Delete"}
-        </button>
+          Delete
+        </Button>
       </div>
 
       {/* Progress Timeline */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Request Progress</h2>
+      <Card padding="lg">
+        <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+          <Clock className="h-5 w-5 text-gray-400" />
+          Request Progress
+        </h2>
         <div className="relative">
-          {/* Progress Line */}
-          <div className="absolute left-3 top-3 bottom-3 w-0.5 bg-gray-200" />
+          <div className="absolute left-[9px] top-4 bottom-4 w-0.5 bg-gray-200" />
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {WORKFLOW_STAGES.map((stage, index) => {
               const status = getStageStatus(stage.key);
-              const isLast = index === WORKFLOW_STAGES.length - 1;
+              const isProcessing = stage.key === "PROCESSING" && (status === "current" || status === "completed");
 
               return (
                 <div key={stage.key} className="relative flex items-start gap-4">
-                  <div className="relative z-10 bg-white">
+                  <div className="relative z-10 bg-white p-0.5">
                     {getStageIcon(status)}
                   </div>
-                  <div className={cn("flex-1 pb-2", !isLast && "border-b border-gray-100")}>
-                    <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
                       <h3
                         className={cn(
-                          "font-medium",
+                          "font-medium text-sm",
                           status === "completed" && "text-green-700",
                           status === "current" && "text-blue-700",
                           status === "failed" && "text-red-700",
@@ -304,28 +329,20 @@ export default function RequestDetailPage() {
                         {stage.label}
                       </h3>
                       {status === "current" && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                          Current Stage
-                        </span>
+                        <Badge variant="info" size="sm">In Progress</Badge>
                       )}
                     </div>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        status === "pending" ? "text-gray-400" : "text-gray-500"
-                      )}
-                    >
+                    <p className={cn(
+                      "text-xs mt-0.5",
+                      status === "pending" ? "text-gray-400" : "text-gray-500"
+                    )}>
                       {stage.description}
                     </p>
 
-                    {/* Show processing substeps when at PROCESSING stage or beyond */}
-                    {stage.key === "PROCESSING" && (status === "current" || status === "completed") && (
-                      <div className="mt-4 ml-2 space-y-2 border-l-2 border-gray-200 pl-4">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-                          AI Pipeline Steps
-                        </p>
+                    {/* Processing substeps */}
+                    {isProcessing && (
+                      <div className="mt-3 ml-2 space-y-2 border-l-2 border-gray-200 pl-3">
                         {PROCESSING_SUBSTEPS.map((substep, subIndex) => {
-                          // Determine substep status based on current_processing_step from API
                           const processingComplete = status === "completed";
                           const currentStepKey = request?.current_processing_step || "";
                           const currentStepIndex = PROCESSING_SUBSTEPS.findIndex(s => s.key === currentStepKey);
@@ -334,55 +351,41 @@ export default function RequestDetailPage() {
                           if (processingComplete) {
                             substepStatus = "completed";
                           } else if (currentStepIndex >= 0) {
-                            if (subIndex < currentStepIndex) {
-                              substepStatus = "completed";
-                            } else if (subIndex === currentStepIndex) {
-                              substepStatus = "current";
-                            }
+                            if (subIndex < currentStepIndex) substepStatus = "completed";
+                            else if (subIndex === currentStepIndex) substepStatus = "current";
                           }
 
                           return (
-                            <div key={substep.key} className="flex items-start gap-2">
+                            <div key={substep.key} className="flex items-center gap-2">
                               {substepStatus === "completed" ? (
-                                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                <CheckCircle className="h-3.5 w-3.5 text-green-500" />
                               ) : substepStatus === "current" ? (
-                                <Loader2 className="h-4 w-4 text-blue-500 animate-spin mt-0.5 flex-shrink-0" />
+                                <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
                               ) : (
-                                <div className="h-4 w-4 rounded-full border border-gray-300 mt-0.5 flex-shrink-0" />
+                                <div className="h-3.5 w-3.5 rounded-full border border-gray-300" />
                               )}
-                              <div>
-                                <p className={cn(
-                                  "text-sm font-medium",
-                                  substepStatus === "completed" ? "text-green-700" : substepStatus === "current" ? "text-blue-700" : "text-gray-400"
-                                )}>
-                                  {substep.label}
-                                  {substepStatus === "current" && (
-                                    <span className="ml-2 text-xs text-blue-500 font-normal">Running...</span>
-                                  )}
-                                </p>
-                                <p className={cn(
-                                  "text-xs",
-                                  substepStatus === "completed" ? "text-gray-500" : substepStatus === "current" ? "text-blue-500" : "text-gray-400"
-                                )}>
-                                  {substep.description}
-                                </p>
-                              </div>
+                              <span className={cn(
+                                "text-xs",
+                                substepStatus === "completed" ? "text-green-700" :
+                                substepStatus === "current" ? "text-blue-700" : "text-gray-400"
+                              )}>
+                                {substep.label}
+                              </span>
                             </div>
                           );
                         })}
                       </div>
                     )}
 
-                    {/* Show helpful message when stuck at QUEUED */}
+                    {/* QUEUED helper */}
                     {stage.key === "QUEUED" && status === "current" && (
-                      <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-xs text-yellow-800">
-                          <strong>Note:</strong> Request is waiting for the Celery worker to process it.
-                          Make sure Redis is running and start the worker with:
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-800">
+                          <strong>Note:</strong> Waiting for Celery worker. Run:
+                          <code className="ml-1 bg-amber-100 px-1.5 py-0.5 rounded font-mono">
+                            celery -A app.workers.celery_app worker --loglevel=info
+                          </code>
                         </p>
-                        <code className="block mt-1 text-xs bg-yellow-100 p-2 rounded font-mono">
-                          celery -A app.workers.celery_app worker --loglevel=info
-                        </code>
                       </div>
                     )}
                   </div>
@@ -391,199 +394,153 @@ export default function RequestDetailPage() {
             })}
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Request Details Grid */}
+      {/* Details Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Basic Info */}
-        <div className="bg-white rounded-lg shadow p-6">
+        {/* Request Details */}
+        <Card padding="lg">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <FileText className="h-5 w-5 text-gray-400" />
             Request Details
           </h2>
-          <dl className="space-y-3">
-            <div className="flex justify-between">
+          <dl className="space-y-4">
+            <div className="flex justify-between items-center">
               <dt className="text-sm text-gray-500">Change Type</dt>
               <dd className="text-sm font-medium text-gray-900">
                 {CHANGE_TYPE_LABELS[request.change_type as keyof typeof CHANGE_TYPE_LABELS] || request.change_type}
               </dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <dt className="text-sm text-gray-500">Document Type</dt>
               <dd className="text-sm font-medium text-gray-900">
                 {DOCUMENT_TYPE_LABELS[request.document_type as keyof typeof DOCUMENT_TYPE_LABELS] || request.document_type}
               </dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">Current Status</dt>
-              <dd>
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                    request.status === "APPROVED" || request.status === "COMPLETED"
-                      ? "bg-green-100 text-green-800"
-                      : request.status === "REJECTED" || request.status === "FAILED"
-                      ? "bg-red-100 text-red-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  )}
-                >
-                  {STATUS_LABELS[request.status]}
-                </span>
-              </dd>
-            </div>
             {request.risk_tier && (
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <dt className="text-sm text-gray-500">Risk Tier</dt>
-                <dd>
-                  <span
-                    className={cn(
-                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                      RISK_TIER_COLORS[request.risk_tier as keyof typeof RISK_TIER_COLORS]
-                    )}
-                  >
-                    {request.risk_tier}
-                  </span>
-                </dd>
+                <dd><RiskBadge tier={request.risk_tier as "HIGH" | "MEDIUM" | "LOW"} /></dd>
               </div>
             )}
           </dl>
-        </div>
+        </Card>
 
         {/* Customer Info */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <Card padding="lg">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <User className="h-5 w-5 text-gray-400" />
             Customer Information
           </h2>
-          <dl className="space-y-3">
-            <div className="flex justify-between">
+          <dl className="space-y-4">
+            <div className="flex justify-between items-center">
               <dt className="text-sm text-gray-500">Customer ID</dt>
               <dd className="text-sm font-medium text-gray-900">{request.customer_id}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">Requested Old Value</dt>
+            <div className="flex justify-between items-center">
+              <dt className="text-sm text-gray-500">Old Value</dt>
               <dd className="text-sm font-medium text-gray-900">{request.requested_old_value}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">Requested New Value</dt>
+            <div className="flex justify-between items-center">
+              <dt className="text-sm text-gray-500">New Value</dt>
               <dd className="text-sm font-medium text-gray-900">{request.requested_new_value}</dd>
             </div>
           </dl>
-        </div>
+        </Card>
 
-        {/* Timestamps */}
-        <div className="bg-white rounded-lg shadow p-6">
+        {/* Timeline */}
+        <Card padding="lg">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-400" />
             Timeline
           </h2>
-          <dl className="space-y-3">
-            <div className="flex justify-between">
+          <dl className="space-y-4">
+            <div className="flex justify-between items-center">
               <dt className="text-sm text-gray-500">Created</dt>
               <dd className="text-sm font-medium text-gray-900">{formatDate(request.created_at)}</dd>
             </div>
             {request.validated_at && (
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <dt className="text-sm text-gray-500">Validated</dt>
                 <dd className="text-sm font-medium text-gray-900">{formatDate(request.validated_at)}</dd>
               </div>
             )}
-            {request.processing_started_at && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-gray-500">Processing Started</dt>
-                <dd className="text-sm font-medium text-gray-900">{formatDate(request.processing_started_at)}</dd>
-              </div>
-            )}
             {request.processing_completed_at && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-gray-500">Processing Completed</dt>
+              <div className="flex justify-between items-center">
+                <dt className="text-sm text-gray-500">AI Processed</dt>
                 <dd className="text-sm font-medium text-gray-900">{formatDate(request.processing_completed_at)}</dd>
               </div>
             )}
             {request.decided_at && (
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <dt className="text-sm text-gray-500">Decision Made</dt>
                 <dd className="text-sm font-medium text-gray-900">{formatDate(request.decided_at)}</dd>
               </div>
             )}
-            {request.completed_at && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-gray-500">Completed</dt>
-                <dd className="text-sm font-medium text-gray-900">{formatDate(request.completed_at)}</dd>
-              </div>
-            )}
           </dl>
-        </div>
+        </Card>
 
-        {/* AI Analysis (if available) */}
+        {/* AI Analysis */}
         {(request.confidence || request.ai_recommendation) && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Analysis</h2>
-            <dl className="space-y-3">
+          <Card padding="lg">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Brain className="h-5 w-5 text-gray-400" />
+              AI Analysis
+            </h2>
+            <dl className="space-y-4">
               {request.ai_recommendation && (
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <dt className="text-sm text-gray-500">Recommendation</dt>
-                  <dd
-                    className={cn(
-                      "text-sm font-medium",
-                      request.ai_recommendation === "APPROVE"
-                        ? "text-green-600"
-                        : request.ai_recommendation === "REJECT"
-                        ? "text-red-600"
-                        : "text-yellow-600"
-                    )}
-                  >
-                    {request.ai_recommendation}
+                  <dd>
+                    <Badge
+                      variant={
+                        request.ai_recommendation === "APPROVE" ? "success" :
+                        request.ai_recommendation === "REJECT" ? "danger" : "warning"
+                      }
+                    >
+                      {request.ai_recommendation}
+                    </Badge>
                   </dd>
                 </div>
               )}
               {request.confidence?.overall && (
-                <div className="flex justify-between">
-                  <dt className="text-sm text-gray-500">Overall Confidence</dt>
-                  <dd className="text-sm font-medium text-gray-900">
+                <div className="flex justify-between items-center">
+                  <dt className="text-sm text-gray-500">Confidence</dt>
+                  <dd className="text-sm font-bold text-gray-900">
                     {(request.confidence.overall * 100).toFixed(1)}%
-                  </dd>
-                </div>
-              )}
-              {request.confidence?.ocr_confidence && (
-                <div className="flex justify-between">
-                  <dt className="text-sm text-gray-500">OCR Confidence</dt>
-                  <dd className="text-sm font-medium text-gray-900">
-                    {(request.confidence.ocr_confidence * 100).toFixed(1)}%
                   </dd>
                 </div>
               )}
             </dl>
             {request.ai_summary && (
               <div className="mt-4 pt-4 border-t border-gray-100">
-                <dt className="text-sm text-gray-500 mb-2">AI Summary</dt>
-                <dd className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-500 mb-2">AI Summary</p>
+                <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
                   {request.ai_summary}
-                </dd>
+                </p>
               </div>
             )}
-          </div>
+          </Card>
         )}
       </div>
 
       {/* Flags */}
       {request.flags && request.flags.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-yellow-800 mb-2 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            Flags
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {request.flags.map((flag, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-              >
-                {flag}
-              </span>
-            ))}
+        <Card className="bg-amber-50 border-amber-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-medium text-amber-800 mb-2">Flags</h3>
+              <div className="flex flex-wrap gap-2">
+                {request.flags.map((flag, index) => (
+                  <Badge key={index} variant="warning">{flag}</Badge>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

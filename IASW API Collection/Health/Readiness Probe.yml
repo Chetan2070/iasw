@@ -1,0 +1,16 @@
+info:
+  name: Readiness Probe
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{base_url}}/health/ready"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Kubernetes-style readiness probe. Returns 200 if application is ready.

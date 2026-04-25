@@ -1,0 +1,19 @@
+info:
+  name: Get Request Detail
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{base_url}}/requests/REQ-XXXXXXXX"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Get full details of a request including extracted values, confidence scores, forgery detection results, AI recommendation and summary.

@@ -17,8 +17,10 @@ import {
   RiskTier,
   Recommendation,
 } from "@/types";
+import { LoginRequest, TokenResponse, User } from "@/types/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+const TOKEN_STORAGE_KEY = "iasw_tokens";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -26,6 +28,116 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+// Request interceptor to add auth header
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      try {
+        const { accessToken } = JSON.parse(stored);
+        if (accessToken) {
+          config.headers.Authorization = `Bearer ${accessToken}`;
+        }
+      } catch {
+        // Invalid stored data
+      }
+    }
+  }
+  return config;
+});
+
+// Response interceptor for token refresh
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If 401 and not already retrying, try to refresh token
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (stored) {
+          try {
+            const { refreshToken } = JSON.parse(stored);
+            if (refreshToken) {
+              // Try to refresh the token
+              const response = await axios.post<TokenResponse>(
+                `${API_BASE_URL}/auth/refresh`,
+                { refresh_token: refreshToken }
+              );
+
+              // Store new tokens
+              localStorage.setItem(
+                TOKEN_STORAGE_KEY,
+                JSON.stringify({
+                  accessToken: response.data.access_token,
+                  refreshToken: response.data.refresh_token,
+                  user: response.data.user,
+                })
+              );
+
+              // Retry original request with new token
+              originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
+              return api(originalRequest);
+            }
+          } catch {
+            // Refresh failed, clear tokens and redirect to login
+            localStorage.removeItem(TOKEN_STORAGE_KEY);
+            window.location.href = "/login";
+          }
+        }
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Auth APIs
+export const authApi = {
+  /**
+   * Login with username and password
+   */
+  login: async (data: LoginRequest): Promise<TokenResponse> => {
+    const response = await api.post<TokenResponse>("/auth/login", data);
+    return response.data;
+  },
+
+  /**
+   * Refresh access token
+   */
+  refresh: async (refreshToken: string): Promise<TokenResponse> => {
+    const response = await api.post<TokenResponse>("/auth/refresh", {
+      refresh_token: refreshToken,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get current user info
+   */
+  me: async (): Promise<User> => {
+    const response = await api.get<User>("/auth/me");
+    return response.data;
+  },
+
+  /**
+   * Change password
+   */
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ message: string }> => {
+    const response = await api.post("/auth/change-password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
+};
 
 // Request APIs
 export const requestsApi = {
@@ -211,6 +323,38 @@ export const healthApi = {
     const response = await api.get("/health");
     return response.data;
   },
+};
+
+// Helper to get stored tokens
+export const getStoredAuth = () => {
+  if (typeof window === "undefined") return null;
+  const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as {
+      accessToken: string;
+      refreshToken: string;
+      user: User;
+    };
+  } catch {
+    return null;
+  }
+};
+
+// Helper to store tokens
+export const setStoredAuth = (data: {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(data));
+};
+
+// Helper to clear tokens
+export const clearStoredAuth = () => {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
 };
 
 export default api;

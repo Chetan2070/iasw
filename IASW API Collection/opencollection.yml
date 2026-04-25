@@ -1,0 +1,23 @@
+opencollection: 1.0.0
+
+info:
+  name: IASW API Collection
+
+request:
+  variables:
+    - name: base_url
+      value: http://localhost:8000/api/v1
+    - name: access_token
+      value: ""
+    - name: refresh_token
+      value: ""
+
+docs:
+  content: Intelligent Account Servicing Workflow - API endpoints for authentication, requests, checker workbench, customers, admin, and health checks.
+  type: text/markdown
+bundled: false
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

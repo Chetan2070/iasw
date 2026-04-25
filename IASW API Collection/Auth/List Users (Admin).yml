@@ -1,0 +1,19 @@
+info:
+  name: List Users (Admin)
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{base_url}}/auth/users"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: List all users (admin only).

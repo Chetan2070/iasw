@@ -1,0 +1,28 @@
+info:
+  name: Update Customer
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: "{{base_url}}/customers/CUST001"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "full_name": "John Smith Updated",
+        "address": "456 New Street, City"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Update a customer's details. Only provided fields will be updated.

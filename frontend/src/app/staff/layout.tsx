@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Plus, List, Home } from "lucide-react";
+import { FileText, Plus, List, Home, LogOut, Bell, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/staff", icon: Home },
@@ -17,32 +18,80 @@ export default function StaffLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  const getBreadcrumbs = () => {
+    const paths = pathname.split("/").filter(Boolean);
+    const breadcrumbs = [{ name: "Staff", href: "/staff" }];
+
+    if (paths.length > 1) {
+      if (paths[1] === "requests") {
+        breadcrumbs.push({ name: "Requests", href: "/staff/requests" });
+        if (paths[2] === "new") {
+          breadcrumbs.push({ name: "New Request", href: "/staff/requests/new" });
+        } else if (paths[2]) {
+          breadcrumbs.push({ name: "Request Details", href: pathname });
+        }
+      }
+    }
+
+    return breadcrumbs;
+  };
+
+  const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-subtle">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <FileText className="h-8 w-8 text-blue-600" />
-                <span className="ml-2 text-xl font-semibold text-gray-900">
+            <div className="flex items-center gap-4">
+              <Link href="/" className="flex items-center group">
+                <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                  <FileText className="h-6 w-6 text-blue-600" />
+                </div>
+                <span className="ml-3 text-xl font-bold text-gray-900">
                   IASW
                 </span>
               </Link>
-              <span className="ml-4 px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+              <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-medium rounded-full shadow-sm">
                 Staff Portal
               </span>
             </div>
-            <div className="text-sm text-gray-500">Welcome, Staff User</div>
+            <div className="flex items-center gap-3">
+              <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+              </button>
+              <div className="h-6 w-px bg-gray-200"></div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                  {user?.username?.charAt(0).toUpperCase() || "S"}
+                </div>
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.username || "Staff User"}
+                  </p>
+                  <p className="text-xs text-gray-500">Staff Member</p>
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-gray-200 hover:border-red-200"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-sm min-h-[calc(100vh-64px)] border-r">
+        <aside className="w-64 bg-white/50 backdrop-blur-sm min-h-[calc(100vh-64px)] border-r border-gray-200/50 sticky top-16 self-start">
           <nav className="p-4 space-y-1">
             {navigation.map((item) => {
               const isActive =
@@ -53,27 +102,62 @@ export default function StaffLayout({
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors",
+                    "flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200",
                     isActive
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-blue-50 text-blue-700 shadow-sm"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   )}
                 >
                   <item.icon
                     className={cn(
-                      "mr-3 h-5 w-5",
-                      isActive ? "text-blue-700" : "text-gray-400"
+                      "mr-3 h-5 w-5 transition-colors",
+                      isActive ? "text-blue-600" : "text-gray-400"
                     )}
                   />
                   {item.name}
+                  {isActive && (
+                    <ChevronRight className="ml-auto h-4 w-4 text-blue-400" />
+                  )}
                 </Link>
               );
             })}
           </nav>
+
+          {/* Help Section */}
+          <div className="absolute bottom-4 left-4 right-4">
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <h4 className="text-sm font-medium text-blue-900">Need Help?</h4>
+              <p className="text-xs text-blue-700 mt-1">
+                Contact support for assistance with requests.
+              </p>
+            </div>
+          </div>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6">
+          {/* Breadcrumbs */}
+          {breadcrumbs.length > 1 && (
+            <nav className="mb-4 flex items-center gap-2 text-sm">
+              {breadcrumbs.map((crumb, index) => (
+                <div key={crumb.href} className="flex items-center gap-2">
+                  {index > 0 && <ChevronRight className="h-4 w-4 text-gray-400" />}
+                  {index === breadcrumbs.length - 1 ? (
+                    <span className="text-gray-600 font-medium">{crumb.name}</span>
+                  ) : (
+                    <Link
+                      href={crumb.href}
+                      className="text-gray-500 hover:text-blue-600 transition-colors"
+                    >
+                      {crumb.name}
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </nav>
+          )}
+          <div className="animate-fade-in">{children}</div>
+        </main>
       </div>
     </div>
   );

@@ -1,0 +1,908 @@
+{
+  "info": {
+    "name": "IASW API Collection",
+    "description": "Intelligent Account Servicing Workflow - API endpoints for authentication, requests, checker workbench, customers, admin, and health checks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Authenticate user and return JWT tokens.\n\nTest Credentials:\n- admin / admin123 (admin role)\n- staff / staff123 (staff role)\n- chk-001 / checker123 (checker role)",
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Refresh access token using refresh token.",
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Register a new user account (self-service).\n\nRoles available: staff, checker\n\nAdmin accounts cannot be self-registered.",
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"staff\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get current authenticated user's information.",
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Change current user's password.",
+            "url": {
+              "raw": "{{base_url}}/auth/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "change-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"admin123\",\n  \"new_password\": \"newpassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create User (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Create a new user (admin only).\n\nRoles: staff, checker, admin",
+            "url": {
+              "raw": "{{base_url}}/auth/users",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "users"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"staff\",\n  \"checker_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "List all users (admin only).",
+            "url": {
+              "raw": "{{base_url}}/auth/users",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "users"]
+            }
+          }
+        },
+        {
+          "name": "Delete User (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Delete a user by ID (admin only). Cannot delete your own account.",
+            "url": {
+              "raw": "{{base_url}}/auth/users/USR-XXXXXXXX",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "users", "USR-XXXXXXXX"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Requests",
+      "item": [
+        {
+          "name": "Create Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Create a new change request.\n\nChange Types: LEGAL_NAME, ADDRESS, CONTACT, KYC\n\nDocument Types: GAZETTE_NOTIFICATION, PASSPORT, DRIVERS_LICENSE, UTILITY_BILL, BANK_STATEMENT",
+            "url": {
+              "raw": "{{base_url}}/requests",
+              "host": ["{{base_url}}"],
+              "path": ["requests"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_number\": \"1234567890\",\n  \"change_type\": \"LEGAL_NAME\",\n  \"document_type\": \"GAZETTE_NOTIFICATION\",\n  \"current_value\": \"John Doe\",\n  \"new_value\": \"John Smith\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Upload a supporting document for a request.\n\nSupported File Types: PDF, JPEG, PNG, TIFF\nMax File Size: 10 MB",
+            "url": {
+              "raw": "{{base_url}}/requests/REQ-XXXXXXXX/upload",
+              "host": ["{{base_url}}"],
+              "path": ["requests", "REQ-XXXXXXXX", "upload"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/document.pdf"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "List requests with optional filters.\n\nFilters: customer_id, change_type, status\nPagination: page (default: 1), limit (default: 20, max: 100)",
+            "url": {
+              "raw": "{{base_url}}/requests?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["requests"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "customer_id",
+                  "value": "CUST001",
+                  "disabled": true
+                },
+                {
+                  "key": "change_type",
+                  "value": "LEGAL_NAME",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "AI_VERIFIED_PENDING_HUMAN",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Request Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get summary statistics for all requests.\n\nReturns: total, pending, approved, rejected",
+            "url": {
+              "raw": "{{base_url}}/requests/stats/summary",
+              "host": ["{{base_url}}"],
+              "path": ["requests", "stats", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Get Request Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get full details of a request including extracted values, confidence scores, forgery detection results, AI recommendation and summary.",
+            "url": {
+              "raw": "{{base_url}}/requests/REQ-XXXXXXXX",
+              "host": ["{{base_url}}"],
+              "path": ["requests", "REQ-XXXXXXXX"]
+            }
+          }
+        },
+        {
+          "name": "Delete Request",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Delete a request. For development/testing purposes.",
+            "url": {
+              "raw": "{{base_url}}/requests/REQ-XXXXXXXX",
+              "host": ["{{base_url}}"],
+              "path": ["requests", "REQ-XXXXXXXX"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checker",
+      "item": [
+        {
+          "name": "Get Queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get the queue of requests pending human review.\n\nFilters: risk_tier (LOW, MEDIUM, HIGH), ai_recommendation (APPROVE, REJECT, MANUAL_REVIEW)",
+            "url": {
+              "raw": "{{base_url}}/checker/queue?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "queue"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "risk_tier",
+                  "value": "HIGH",
+                  "disabled": true
+                },
+                {
+                  "key": "ai_recommendation",
+                  "value": "APPROVE",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Claim Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Claim a request for review. Checker has 15 minutes to complete review.",
+            "url": {
+              "raw": "{{base_url}}/checker/claim/REQ-XXXXXXXX?checker_id=chk-001",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "claim", "REQ-XXXXXXXX"],
+              "query": [
+                {
+                  "key": "checker_id",
+                  "value": "chk-001"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Review Data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get complete review data for the checker UI including request details, extracted values, confidence scores, forgery detection, AI recommendation.",
+            "url": {
+              "raw": "{{base_url}}/checker/review/REQ-XXXXXXXX",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "review", "REQ-XXXXXXXX"]
+            }
+          }
+        },
+        {
+          "name": "Submit Decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Submit a decision for a claimed request.\n\nDecisions:\n- APPROVE: Triggers RPS update\n- REJECT: Requires reason\n- MORE_INFO: Requires reason\n- ESCALATE: Requires reason",
+            "url": {
+              "raw": "{{base_url}}/checker/decide/REQ-XXXXXXXX?checker_id=chk-001",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "decide", "REQ-XXXXXXXX"],
+              "query": [
+                {
+                  "key": "checker_id",
+                  "value": "chk-001"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"reason\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Release Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Release a claimed request back to the queue.",
+            "url": {
+              "raw": "{{base_url}}/checker/release/REQ-XXXXXXXX?checker_id=chk-001",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "release", "REQ-XXXXXXXX"],
+              "query": [
+                {
+                  "key": "checker_id",
+                  "value": "chk-001"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Review History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get completed reviews for a specific checker.",
+            "url": {
+              "raw": "{{base_url}}/checker/reviews?checker_id=chk-001&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["checker", "reviews"],
+              "query": [
+                {
+                  "key": "checker_id",
+                  "value": "chk-001"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Create a new customer record (simulates adding to core banking system).",
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": ["{{base_url}}"],
+              "path": ["customers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"CUST-NEW001\",\n  \"full_name\": \"Jane Doe\",\n  \"date_of_birth\": \"1990-05-15\",\n  \"address\": \"123 Main Street, City\",\n  \"email\": \"jane.doe@example.com\",\n  \"phone\": \"+1234567890\",\n  \"account_number\": \"9999999999\",\n  \"account_type\": \"SAVINGS\",\n  \"branch_code\": \"BR001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "List all customers with pagination. Optionally search by name or account number.",
+            "url": {
+              "raw": "{{base_url}}/customers?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["customers"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "John",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get a specific customer by their customer ID.",
+            "url": {
+              "raw": "{{base_url}}/customers/CUST001",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "CUST001"]
+            }
+          }
+        },
+        {
+          "name": "Get Customer by Account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get a customer by their account number.",
+            "url": {
+              "raw": "{{base_url}}/customers/account/1234567890",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "account", "1234567890"]
+            }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Update a customer's details. Only provided fields will be updated.",
+            "url": {
+              "raw": "{{base_url}}/customers/CUST001",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "CUST001"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"John Smith Updated\",\n  \"address\": \"456 New Street, City\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Delete a customer record.",
+            "url": {
+              "raw": "{{base_url}}/customers/CUST-NEW001",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "CUST-NEW001"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get All Tables",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "default"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Get data from all main tables for debugging. WARNING: For development only.",
+            "url": {
+              "raw": "{{base_url}}/admin/tables",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "tables"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Check the health of the application and its dependencies (database, Redis).",
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Kubernetes-style readiness probe. Returns 200 if application is ready.",
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": ["{{base_url}}"],
+              "path": ["health", "ready"]
+            }
+          }
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Kubernetes-style liveness probe. Returns 200 if application is alive.",
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": ["{{base_url}}"],
+              "path": ["health", "live"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api/v1"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    }
+  ]
+}

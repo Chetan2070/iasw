@@ -14,7 +14,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import create_app
+from app.main import create_application
 from app.db.session import get_db
 from app.models.request import Base, Request
 from app.models.customer import Customer, Checker
@@ -76,7 +76,7 @@ async def test_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture(scope="function")
 async def client(test_engine, test_session) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client with database override."""
-    app = create_app()
+    app = create_application()
 
     async def override_get_db():
         yield test_session

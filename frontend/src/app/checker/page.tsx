@@ -2,10 +2,15 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ClipboardList, CheckCircle, Clock, AlertTriangle, RefreshCw } from "lucide-react";
+import { ClipboardList, CheckCircle, Clock, AlertTriangle, ArrowRight, Eye, Zap } from "lucide-react";
 import { checkerApi } from "@/lib/api";
 import { QueueItem } from "@/types";
 import { usePolling } from "@/hooks/usePolling";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { StatCard } from "@/components/ui/StatCard";
+import { Badge, RiskBadge } from "@/components/ui/Badge";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 
 export default function CheckerDashboard() {
   const [queueStats, setQueueStats] = useState({
@@ -34,150 +39,171 @@ export default function CheckerDashboard() {
     }
   }, []);
 
-  // Auto-refresh every 10 seconds
   usePolling(fetchStats, 10000);
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Checker Dashboard</h1>
-        <Link
-          href="/checker/queue"
-          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          <ClipboardList className="h-5 w-5 mr-2" />
-          View Queue
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Checker Dashboard</h1>
+          <p className="text-gray-500 mt-1">Overview of pending reviews</p>
+        </div>
+        <Link href="/checker/queue">
+          <Button variant="primary" icon={<ClipboardList className="h-5 w-5" />} className="bg-green-600 hover:bg-green-700">
+            View Queue
+          </Button>
         </Link>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <ClipboardList className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Total in Queue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? "-" : queueStats.total}
-              </p>
-            </div>
-          </div>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">High Risk</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? "-" : queueStats.high}
-              </p>
-            </div>
-          </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <StatCard
+            title="Total in Queue"
+            value={queueStats.total}
+            icon={ClipboardList}
+            variant="blue"
+          />
+          <StatCard
+            title="High Risk"
+            value={queueStats.high}
+            icon={AlertTriangle}
+            variant="red"
+          />
+          <StatCard
+            title="Medium Risk"
+            value={queueStats.medium}
+            icon={Clock}
+            variant="yellow"
+          />
+          <StatCard
+            title="Low Risk"
+            value={queueStats.low}
+            icon={CheckCircle}
+            variant="green"
+          />
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <Clock className="h-6 w-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Medium Risk</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? "-" : queueStats.medium}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Low Risk</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {loading ? "-" : queueStats.low}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            href="/checker/queue?risk_tier=HIGH"
-            className="p-4 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-          >
-            <div className="flex items-center">
-              <AlertTriangle className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="font-medium text-gray-900">Review High Risk</p>
-                <p className="text-sm text-gray-500">
-                  Priority items requiring attention
-                </p>
+      <Card padding="none">
+        <CardHeader
+          title="Quick Actions"
+          description="Jump to filtered queue views"
+          className="px-6 pt-6"
+        />
+        <CardContent className="px-6 pb-6 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link
+              href="/checker/queue?risk_tier=HIGH"
+              className="group"
+            >
+              <div className="p-5 border-2 border-red-100 rounded-xl hover:border-red-200 hover:bg-red-50/50 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-red-100 rounded-xl group-hover:scale-110 transition-transform">
+                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900">High Risk Items</p>
+                      {queueStats.high > 0 && (
+                        <Badge variant="danger" size="sm">{queueStats.high}</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      Priority items requiring attention
+                    </p>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-red-500 group-hover:translate-x-1 transition-all" />
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
 
-          <Link
-            href="/checker/queue?ai_recommendation=APPROVE"
-            className="p-4 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
-          >
-            <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="font-medium text-gray-900">AI Recommends Approve</p>
-                <p className="text-sm text-gray-500">
-                  Items with high confidence
-                </p>
+            <Link
+              href="/checker/queue?ai_recommendation=APPROVE"
+              className="group"
+            >
+              <div className="p-5 border-2 border-green-100 rounded-xl hover:border-green-200 hover:bg-green-50/50 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-green-100 rounded-xl group-hover:scale-110 transition-transform">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900">AI: Approve</p>
+                      <Badge variant="success" size="sm">
+                        <Zap className="h-3 w-3 mr-1" />
+                        High Confidence
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      Items with high AI confidence
+                    </p>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-green-500 group-hover:translate-x-1 transition-all" />
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
 
-          <Link
-            href="/checker/queue?ai_recommendation=MANUAL_REVIEW"
-            className="p-4 border border-yellow-200 rounded-lg hover:bg-yellow-50 transition-colors"
-          >
-            <div className="flex items-center">
-              <Clock className="h-8 w-8 text-yellow-600" />
-              <div className="ml-4">
-                <p className="font-medium text-gray-900">Manual Review</p>
-                <p className="text-sm text-gray-500">
-                  Items needing human judgment
-                </p>
+            <Link
+              href="/checker/queue?ai_recommendation=MANUAL_REVIEW"
+              className="group"
+            >
+              <div className="p-5 border-2 border-amber-100 rounded-xl hover:border-amber-200 hover:bg-amber-50/50 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-amber-100 rounded-xl group-hover:scale-110 transition-transform">
+                    <Eye className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">Manual Review</p>
+                    <p className="text-sm text-gray-500">
+                      Items needing human judgment
+                    </p>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Review Guidelines */}
+      <Card className="bg-green-50 border-green-200">
+        <div className="flex items-start gap-4">
+          <div className="p-2 bg-green-100 rounded-lg">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-green-900 mb-2">Review Guidelines</h3>
+            <ul className="text-sm text-green-800 space-y-1">
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                Always verify document authenticity before approving
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                Check AI confidence scores and field match details
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                Flag any suspicious documents for escalation
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                Add detailed reasons when rejecting requests
+              </li>
+            </ul>
+          </div>
         </div>
-      </div>
-
-      {/* Info Box */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <h3 className="font-medium text-green-800 mb-2">Review Guidelines</h3>
-        <ul className="text-sm text-green-700 space-y-1">
-          <li>
-            • Always verify document authenticity before approving
-          </li>
-          <li>
-            • Check AI confidence scores and field match details
-          </li>
-          <li>
-            • Flag any suspicious documents for escalation
-          </li>
-          <li>
-            • Add detailed reasons when rejecting requests
-          </li>
-        </ul>
-      </div>
+      </Card>
     </div>
   );
 }

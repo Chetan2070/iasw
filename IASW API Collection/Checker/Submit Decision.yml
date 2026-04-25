@@ -1,0 +1,39 @@
+info:
+  name: Submit Decision
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{base_url}}/checker/decide/REQ-XXXXXXXX?checker_id=chk-001"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+    - name: Content-Type
+      value: application/json
+  params:
+    - name: checker_id
+      value: chk-001
+      type: query
+  body:
+    type: json
+    data: |-
+      {
+        "decision": "APPROVE",
+        "reason": null
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Submit a decision for a claimed request.
+
+  Decisions:
+  - APPROVE: Triggers RPS update
+  - REJECT: Requires reason
+  - MORE_INFO: Requires reason
+  - ESCALATE: Requires reason

@@ -1,0 +1,19 @@
+info:
+  name: Delete User (Admin)
+  type: http
+  seq: 7
+
+http:
+  method: DELETE
+  url: "{{base_url}}/auth/users/USR-XXXXXXXX"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Delete a user by ID (admin only). Cannot delete your own account.

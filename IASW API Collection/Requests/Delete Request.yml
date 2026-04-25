@@ -1,0 +1,19 @@
+info:
+  name: Delete Request
+  type: http
+  seq: 6
+
+http:
+  method: DELETE
+  url: "{{base_url}}/requests/REQ-XXXXXXXX"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Delete a request. For development/testing purposes.

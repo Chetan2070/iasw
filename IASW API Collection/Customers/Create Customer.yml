@@ -1,0 +1,35 @@
+info:
+  name: Create Customer
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/customers"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "customer_id": "CUST-NEW001",
+        "full_name": "Jane Doe",
+        "date_of_birth": "1990-05-15",
+        "address": "123 Main Street, City",
+        "email": "jane.doe@example.com",
+        "phone": "+1234567890",
+        "account_number": "9999999999",
+        "account_type": "SAVINGS",
+        "branch_code": "BR001"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: Create a new customer record (simulates adding to core banking system).

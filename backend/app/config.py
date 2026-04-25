@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
     # ===================
+    # JWT Authentication
+    # ===================
+    JWT_SECRET_KEY: str = Field(
+        default="change-me-in-production-jwt-secret",
+        description="Secret key for JWT token signing"
+    )
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days
+
+    # ===================
     # Celery
     # ===================
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"

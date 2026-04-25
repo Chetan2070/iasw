@@ -6,9 +6,11 @@ Seeds the database with initial mock data for testing.
 
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal, init_db
-from app.models import Customer, Checker
+from app.models import Customer, Checker, User, UserRole
+from app.utils.security import hash_password
 
 
 async def seed_customers(session: AsyncSession):
@@ -127,6 +129,59 @@ async def seed_checkers(session: AsyncSession):
     await session.commit()
 
 
+async def seed_users(session: AsyncSession):
+    """Seed user accounts for authentication."""
+    # Get existing checkers to create linked user accounts
+    result = await session.execute(select(Checker))
+    checkers = result.scalars().all()
+
+    users = [
+        # Admin user
+        User(
+            id="USR-ADMIN001",
+            username="admin",
+            email="admin@iasw.local",
+            password_hash=hash_password("admin123"),
+            role=UserRole.ADMIN,
+            is_active=True,
+        ),
+        # Staff user
+        User(
+            id="USR-STAFF001",
+            username="staff",
+            email="staff@iasw.local",
+            password_hash=hash_password("staff123"),
+            role=UserRole.STAFF,
+            is_active=True,
+        ),
+    ]
+
+    # Create user accounts for each checker
+    for checker in checkers:
+        users.append(User(
+            id=f"USR-{checker.checker_id.upper().replace('_', '')}",
+            username=checker.checker_id,
+            email=checker.email or f"{checker.checker_id}@iasw.local",
+            password_hash=hash_password("checker123"),
+            role=UserRole.CHECKER,
+            checker_id=checker.checker_id,
+            is_active=checker.is_active == "true",
+        ))
+
+    for user in users:
+        existing = await session.get(User, user.id)
+        if not existing:
+            # Also check by username
+            result = await session.execute(
+                select(User).where(User.username == user.username)
+            )
+            if not result.scalar_one_or_none():
+                session.add(user)
+                print(f"Added user: {user.username} ({user.role.value})")
+
+    await session.commit()
+
+
 async def main():
     """Run database seeding."""
     print("Initializing database...")
@@ -136,8 +191,15 @@ async def main():
     async with AsyncSessionLocal() as session:
         await seed_customers(session)
         await seed_checkers(session)
+        await seed_users(session)
 
     print("\nDatabase seeding complete!")
+    print("\nTest credentials:")
+    print("  admin / admin123 (admin role)")
+    print("  staff / staff123 (staff role)")
+    print("  checker_jane / checker123 (checker role)")
+    print("  checker_john / checker123 (checker role)")
+    print("  checker_senior / checker123 (checker role)")
 
 
 if __name__ == "__main__":

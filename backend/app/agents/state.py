@@ -15,10 +15,9 @@ class ProcessingState(TypedDict, total=False):
     This TypedDict defines all fields that can be passed between nodes.
     Each node reads from and writes to this shared state.
     """
-
-    # ===================
+   
     # Input (from request)
-    # ===================
+    
     request_id: str
     customer_id: str
     change_type: str
@@ -27,67 +26,67 @@ class ProcessingState(TypedDict, total=False):
     requested_new_value: str
     document_path: str
 
-    # ===================
+   
     # Validation Output
-    # ===================
+   
     validation_passed: bool
     validation_errors: List[str]
 
-    # ===================
+   
     # OCR Output
-    # ===================
+   
     ocr_text: str
     ocr_confidence: float
     ocr_word_confidences: List[dict]
     ocr_method: str  # "tesseract" or "google_vision"
     ocr_pages_processed: int
 
-    # ===================
+   
     # Classification Output
-    # ===================
+   
     detected_document_type: str
     classification_confidence: float
     classification_match: bool
     classification_signals: List[str]
 
-    # ===================
+   
     # Extraction Output
-    # ===================
+   
     extracted_fields: dict  # {field_name: {value, confidence, source_snippet}}
     extraction_confidence: float
     extracted_old_value: str
     extracted_new_value: str
 
-    # ===================
+   
     # Forgery Detection Output
-    # ===================
+   
     forgery_score: float  # 0.0 (forged) to 1.0 (authentic)
     forgery_result: str  # PASS, FLAG, FAIL
     forgery_details: dict  # Per-layer breakdown
 
-    # ===================
+   
     # Scoring Output
-    # ===================
+   
     old_name_match_score: float
     new_name_match_score: float
     field_scores: List[dict]
     overall_score: float
     risk_tier: str  # LOW, MEDIUM, HIGH
 
-    # ===================
+   
     # Summary Output
-    # ===================
+   
     ai_summary: str
     ai_recommendation: str  # APPROVE, REJECT, MANUAL_REVIEW
 
-    # ===================
+   
     # Flags (accumulated through pipeline)
-    # ===================
+   
     flags: List[str]
 
-    # ===================
+   
     # Processing Metadata
-    # ===================
+   
     current_step: str
     processing_started_at: str
     processing_completed_at: str

@@ -1,0 +1,36 @@
+info:
+  name: Create Request
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/requests"
+  headers:
+    - name: Authorization
+      value: Bearer {{access_token}}
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "account_number": "1234567890",
+        "change_type": "LEGAL_NAME",
+        "document_type": "GAZETTE_NOTIFICATION",
+        "current_value": "John Doe",
+        "new_value": "John Smith"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Create a new change request.
+
+  Change Types: LEGAL_NAME, ADDRESS, CONTACT, KYC
+
+  Document Types: GAZETTE_NOTIFICATION, PASSPORT, DRIVERS_LICENSE, UTILITY_BILL, BANK_STATEMENT

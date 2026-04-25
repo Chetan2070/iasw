@@ -12,38 +12,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.state import ProcessingState
+from app.agents.prompts import CLASSIFIER_SYSTEM_PROMPT
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-CLASSIFIER_SYSTEM_PROMPT = """You are a document classification expert for a banking system.
-Your task is to analyze the text extracted from a document and determine its type.
-
-You must classify the document into ONE of these categories:
-- MARRIAGE_CERTIFICATE: A certificate issued by a government authority certifying a marriage
-- GAZETTE_NOTIFICATION: An official government gazette notification announcing a name change
-- DEED_POLL: A legal document for changing one's name
-- COURT_ORDER: A court order related to name change
-- UTILITY_BILL: A bill from a utility company (electricity, water, gas, etc.)
-- BIRTH_CERTIFICATE: A certificate of birth issued by government
-- PASSPORT: A travel document/passport
-- PAN_CARD: An Indian PAN card
-- CONSENT_FORM: A consent/authorization form
-- OTHER: If none of the above categories match
-
-Analyze the text carefully for:
-1. Document headers and titles
-2. Official seals or authority mentions
-3. Key phrases and terminology
-4. Structure and format indicators
-
-Respond in JSON format only:
-{
-    "detected_type": "DOCUMENT_TYPE",
-    "confidence": 0.0 to 1.0,
-    "signals": ["list", "of", "evidence", "found"],
-    "reasoning": "Brief explanation"
-}"""
 
 
 async def classifier_node(state: ProcessingState) -> Dict[str, Any]:
