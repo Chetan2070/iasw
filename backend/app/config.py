@@ -83,15 +83,35 @@ class Settings(BaseSettings):
     NAME_MATCH_HIGH_THRESHOLD: float = 0.95
     NAME_MATCH_LOW_THRESHOLD: float = 0.85
 
+    # Forgery Detection Layer Weights
+    # Rationale: ELA and ML are primary detection methods (30% each),
+    # metadata and font analysis provide supporting signals (20% each).
+    # Total must equal 1.0
+    FORGERY_WEIGHT_METADATA: float = 0.20  # Editing software detection
+    FORGERY_WEIGHT_ELA: float = 0.30       # Error Level Analysis - detects edits
+    FORGERY_WEIGHT_FONT: float = 0.20      # Font consistency check
+    FORGERY_WEIGHT_ML: float = 0.30        # ML-based pattern detection
+
     # Confidence Score Weights
-    WEIGHT_NAME_MATCH: float = 0.40
-    WEIGHT_DOC_AUTHENTICITY: float = 0.30
-    WEIGHT_OCR_CONFIDENCE: float = 0.15
-    WEIGHT_EXTRACTION_CONFIDENCE: float = 0.15
+    # Rationale: Name matching is primary validation (40%), document authenticity
+    # is critical for fraud prevention (30%), OCR/extraction quality provide
+    # confidence in the extracted data (15% each). Total must equal 1.0
+    WEIGHT_NAME_MATCH: float = 0.40        # Primary validation signal
+    WEIGHT_DOC_AUTHENTICITY: float = 0.30  # Forgery detection importance
+    WEIGHT_OCR_CONFIDENCE: float = 0.15    # Text extraction quality
+    WEIGHT_EXTRACTION_CONFIDENCE: float = 0.15  # LLM extraction confidence
 
     # Risk Tier Thresholds
+    # Rationale: 90%+ = high confidence approval, 70-90% = needs review,
+    # <70% = high risk requiring careful scrutiny
     RISK_LOW_THRESHOLD: float = 0.90
     RISK_MEDIUM_THRESHOLD: float = 0.70
+
+    # ===================
+    # Checker Workflow
+    # ===================
+    CHECKER_LOCK_TIMEOUT_MINUTES: int = 15  # How long a checker holds a claim
+    CHECKER_LOCK_CLEANUP_INTERVAL_MINUTES: int = 5  # Background cleanup frequency
 
     # ===================
     # Security

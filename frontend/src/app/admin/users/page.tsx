@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Users, Search, Plus, Edit2, Trash2, Shield, UserCheck, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Search, Plus, Edit2, Trash2, Shield, UserCheck, FileText, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,55 +15,8 @@ import {
   TableCell,
   TableEmpty,
 } from "@/components/ui/Table";
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: "admin" | "staff" | "checker";
-  status: "active" | "inactive";
-  createdAt: string;
-  lastLogin: string | null;
-}
-
-const mockUsers: User[] = [
-  {
-    id: "1",
-    username: "admin",
-    email: "admin@iasw.com",
-    role: "admin",
-    status: "active",
-    createdAt: "2024-01-01T00:00:00Z",
-    lastLogin: "2024-03-15T10:30:00Z",
-  },
-  {
-    id: "2",
-    username: "staff_user",
-    email: "staff@iasw.com",
-    role: "staff",
-    status: "active",
-    createdAt: "2024-01-15T00:00:00Z",
-    lastLogin: "2024-03-14T14:20:00Z",
-  },
-  {
-    id: "3",
-    username: "checker_user",
-    email: "checker@iasw.com",
-    role: "checker",
-    status: "active",
-    createdAt: "2024-02-01T00:00:00Z",
-    lastLogin: "2024-03-15T09:00:00Z",
-  },
-  {
-    id: "4",
-    username: "inactive_staff",
-    email: "inactive@iasw.com",
-    role: "staff",
-    status: "inactive",
-    createdAt: "2024-01-20T00:00:00Z",
-    lastLogin: null,
-  },
-];
+import { Skeleton } from "@/components/ui/Skeleton";
+import { adminApi, AdminUser, AdminUserStats } from "@/lib/api";
 
 const roleIcons = {
   admin: Shield,
@@ -78,14 +31,42 @@ const roleColors = {
 } as const;
 
 export default function UsersPage() {
-  const [users] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [stats, setStats] = useState<AdminUserStats | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await adminApi.getUsers({
+        search: searchQuery || undefined,
+      });
+      setUsers(data.users);
+      setStats(data.stats);
+    } catch (err) {
+      setError("Failed to load users. Make sure the backend is running.");
+      console.error("Error fetching users:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (searchQuery !== "") {
+        fetchUsers();
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Never";
@@ -106,31 +87,58 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-500 mt-1">Manage system users and their roles</p>
         </div>
-        <Button icon={<Plus className="h-4 w-4" />}>Add User</Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            icon={<RefreshCw className="h-4 w-4" />}
+            onClick={fetchUsers}
+            loading={loading}
+          >
+            Refresh
+          </Button>
+          <Button icon={<Plus className="h-4 w-4" />}>Add User</Button>
+        </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <Card padding="md" className="bg-red-50 border-red-200">
+          <p className="text-red-700">{error}</p>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         <Card padding="md" className="text-center">
-          <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+          {loading ? (
+            <Skeleton className="h-8 w-16 mx-auto" />
+          ) : (
+            <p className="text-2xl font-bold text-gray-900">{stats?.total || 0}</p>
+          )}
           <p className="text-sm text-gray-500">Total Users</p>
         </Card>
         <Card padding="md" className="text-center">
-          <p className="text-2xl font-bold text-purple-600">
-            {users.filter((u) => u.role === "admin").length}
-          </p>
+          {loading ? (
+            <Skeleton className="h-8 w-16 mx-auto" />
+          ) : (
+            <p className="text-2xl font-bold text-purple-600">{stats?.admin || 0}</p>
+          )}
           <p className="text-sm text-gray-500">Admins</p>
         </Card>
         <Card padding="md" className="text-center">
-          <p className="text-2xl font-bold text-blue-600">
-            {users.filter((u) => u.role === "staff").length}
-          </p>
+          {loading ? (
+            <Skeleton className="h-8 w-16 mx-auto" />
+          ) : (
+            <p className="text-2xl font-bold text-blue-600">{stats?.staff || 0}</p>
+          )}
           <p className="text-sm text-gray-500">Staff</p>
         </Card>
         <Card padding="md" className="text-center">
-          <p className="text-2xl font-bold text-green-600">
-            {users.filter((u) => u.role === "checker").length}
-          </p>
+          {loading ? (
+            <Skeleton className="h-8 w-16 mx-auto" />
+          ) : (
+            <p className="text-2xl font-bold text-green-600">{stats?.checker || 0}</p>
+          )}
           <p className="text-sm text-gray-500">Checkers</p>
         </Card>
       </div>
@@ -162,22 +170,42 @@ export default function UsersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredUsers.length === 0 ? (
+          {loading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div>
+                      <Skeleton className="h-4 w-32 mb-1" />
+                      <Skeleton className="h-3 w-40" />
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-8 w-20" /></TableCell>
+              </TableRow>
+            ))
+          ) : users.length === 0 ? (
             <TableEmpty
               colSpan={6}
               icon={<Users className="h-8 w-8" />}
               title="No users found"
-              description={searchQuery ? "Try adjusting your search" : "Add a user to get started"}
+              description={searchQuery ? "Try adjusting your search" : "No users in the system yet"}
             />
           ) : (
-            filteredUsers.map((user) => {
-              const RoleIcon = roleIcons[user.role];
+            users.map((user) => {
+              const RoleIcon = roleIcons[user.role] || FileText;
+              const roleColor = roleColors[user.role] || "gray";
               return (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full bg-${roleColors[user.role]}-100`}>
-                        <RoleIcon className={`h-4 w-4 text-${roleColors[user.role]}-600`} />
+                      <div className={`p-2 rounded-full bg-${roleColor}-100`}>
+                        <RoleIcon className={`h-4 w-4 text-${roleColor}-600`} />
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{user.username}</p>
@@ -187,7 +215,7 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={roleColors[user.role] === "purple" ? "purple" : roleColors[user.role] === "blue" ? "info" : "success"}
+                      variant={roleColor === "purple" ? "purple" : roleColor === "blue" ? "info" : "success"}
                       size="sm"
                     >
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
@@ -195,17 +223,17 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.status === "active" ? "success" : "default"}
+                      variant={user.is_active ? "success" : "default"}
                       size="sm"
                     >
-                      {user.status}
+                      {user.is_active ? "active" : "inactive"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-gray-600">
-                    {formatDate(user.createdAt)}
+                    {formatDate(user.created_at)}
                   </TableCell>
                   <TableCell className="text-gray-600">
-                    {formatDate(user.lastLogin)}
+                    {formatDate(user.last_login)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

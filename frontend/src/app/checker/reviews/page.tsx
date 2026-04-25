@@ -48,7 +48,7 @@ export default function ReviewsPage() {
   const fetchReviews = useCallback(async () => {
     try {
       setError(null);
-      const response = await checkerApi.getReviewHistory(checkerId, { page, limit: 20 });
+      const response = await checkerApi.getReviewHistory({ page, limit: 20 });
       setReviews(response.items);
       setTotalPages(Math.ceil(response.total / 20));
     } catch (err: any) {
@@ -59,7 +59,7 @@ export default function ReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [checkerId, page]);
+  }, [page]);
 
   useEffect(() => {
     fetchReviews();

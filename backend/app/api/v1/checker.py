@@ -2,6 +2,9 @@
 Checker Endpoints
 
 API endpoints for checker workbench operations.
+
+SECURITY: All endpoints that modify request state require JWT authentication.
+The checker_id is extracted from the authenticated user's token, not from query params.
 """
 
 from datetime import datetime, timedelta
@@ -17,16 +20,44 @@ from app.models import (
     RequestStatus, RiskTier, Recommendation, Decision,
     ActorType, EventType
 )
+from app.models.user import User, UserRole
 from app.schemas import (
     QueueItem, QueueResponse, QueueFilters,
     ClaimResponse, DecisionRequest, DecisionResponse, ReleaseResponse,
     ReviewData, FieldScore, ErrorResponse
 )
+from app.api.deps import get_current_user, require_checker
 
 router = APIRouter()
 
-# Lock duration in minutes
-LOCK_DURATION_MINUTES = 15
+# Lock duration in minutes (configurable via settings)
+LOCK_DURATION_MINUTES = getattr(settings, 'CHECKER_LOCK_TIMEOUT_MINUTES', 15)
+
+
+def get_checker_id_from_user(user: User) -> str:
+    """
+    Extract checker_id from authenticated user.
+
+    For checker role users, uses their checker_id.
+    For admin users, uses their user_id as fallback.
+
+    Raises HTTPException if user doesn't have a valid checker identity.
+    """
+    if user.role == UserRole.CHECKER:
+        if not user.checker_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not have a checker ID configured"
+            )
+        return user.checker_id
+    elif user.role == UserRole.ADMIN:
+        # Admins can act as checkers using their user ID
+        return user.checker_id or user.id
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only checkers and admins can perform this action"
+        )
 
 
 @router.get(
@@ -120,7 +151,7 @@ async def get_queue(
 )
 async def claim_request(
     request_id: str,
-    checker_id: str = Query(..., description="Checker's ID"),
+    current_user: User = Depends(require_checker),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -129,8 +160,14 @@ async def claim_request(
     The checker has 15 minutes to complete their review.
     If the lock expires, the request is automatically released.
 
+    **Authentication:** Requires JWT Bearer token with checker or admin role.
+    The checker_id is extracted from the token, not from query params.
+
     **HITL Enforcement:** This action is only available to human checkers.
     """
+    # Extract checker_id from authenticated user
+    checker_id = get_checker_id_from_user(current_user)
+
     # 1. Check request exists
     request = await db.execute(
         select(Request).where(Request.request_id == request_id)
@@ -211,7 +248,7 @@ async def claim_request(
 async def submit_decision(
     request_id: str,
     decision_data: DecisionRequest,
-    checker_id: str = Query(..., description="Checker's ID"),
+    current_user: User = Depends(require_checker),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -223,10 +260,16 @@ async def submit_decision(
     - MORE_INFO: Requires reason, allows customer resubmit
     - ESCALATE: Requires reason, routes to senior checker
 
+    **Authentication:** Requires JWT Bearer token with checker or admin role.
+    The checker_id is extracted from the token, not from query params.
+
     **HITL Enforcement:**
     This is the critical HITL boundary. Only human checkers can approve
     or reject requests. The RPS update is ONLY triggered by human approval.
     """
+    # Extract checker_id from authenticated user
+    checker_id = get_checker_id_from_user(current_user)
+
     # 1. Check request exists
     request = await db.execute(
         select(Request).where(Request.request_id == request_id)
@@ -380,7 +423,7 @@ async def submit_decision(
 )
 async def release_request(
     request_id: str,
-    checker_id: str = Query(..., description="Checker's ID"),
+    current_user: User = Depends(require_checker),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -388,7 +431,13 @@ async def release_request(
 
     Use this if you cannot complete the review within the time limit
     or need to reassign the request.
+
+    **Authentication:** Requires JWT Bearer token with checker or admin role.
+    The checker_id is extracted from the token, not from query params.
     """
+    # Extract checker_id from authenticated user
+    checker_id = get_checker_id_from_user(current_user)
+
     # 1. Check request exists
     request = await db.execute(
         select(Request).where(Request.request_id == request_id)
@@ -563,17 +612,23 @@ class ReviewHistoryResponse(BaseModel):
     response_model=ReviewHistoryResponse,
 )
 async def get_review_history(
-    checker_id: str = Query(..., description="Checker's ID to filter reviews"),
+    current_user: User = Depends(require_checker),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get completed reviews for a specific checker.
+    Get completed reviews for the authenticated checker.
 
-    Returns all requests that have been decided by the specified checker,
+    Returns all requests that have been decided by the current checker,
     ordered by decision date (most recent first).
+
+    **Authentication:** Requires JWT Bearer token with checker or admin role.
+    The checker_id is extracted from the token automatically.
     """
+    # Extract checker_id from authenticated user
+    checker_id = get_checker_id_from_user(current_user)
+
     # Build query - get requests where this checker made a decision
     query = select(Request).where(
         and_(

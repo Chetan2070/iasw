@@ -25,6 +25,49 @@ sync_engine = create_engine(settings.DATABASE_SYNC_URL)
 SyncSessionLocal = sessionmaker(bind=sync_engine)
 
 
+def run_async(coro):
+    """
+    Safely run an async coroutine from a synchronous Celery task.
+
+    This function handles event loop management properly to avoid conflicts
+    with existing event loops that might be running in the Celery worker.
+
+    Instead of asyncio.run() which always creates a new event loop and fails
+    if one already exists, this function:
+    1. Tries to get the current running loop (if in async context)
+    2. Falls back to creating a new loop only if needed
+    3. Properly cleans up after execution
+
+    Args:
+        coro: The coroutine to execute
+
+    Returns:
+        The result of the coroutine
+    """
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're already in an async context (shouldn't happen in Celery,
+            # but handle it gracefully), create a new loop in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            # Normal case: loop exists but isn't running, use it
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No event loop exists, create one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
+
+
 def update_processing_step(request_id: str, step: str):
     """Update the current processing step in the database."""
     try:
@@ -158,8 +201,10 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
                 # Relative paths are relative to backend directory
                 document_path = os.path.join(BACKEND_DIR, document_path.lstrip('./'))
 
-            # Run async pipeline in sync context
-            final_state = asyncio.run(
+            # Run async pipeline in sync context using safe wrapper
+            # Note: We use run_async() instead of asyncio.run() to handle
+            # potential event loop conflicts in Celery workers
+            final_state = run_async(
                 pipeline.process(
                     request_id=request.request_id,
                     customer_id=request.customer_id,
@@ -168,6 +213,7 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
                     requested_old_value=request.requested_old_value,
                     requested_new_value=request.requested_new_value,
                     document_path=document_path,
+                    on_step_change=update_processing_step,  # Persist step updates to DB
                 )
             )
 
@@ -261,7 +307,7 @@ def process_document(self, request_id: str) -> Dict[str, Any]:
             }
 
         except Exception as e:
-            logger.error(f"[{request_id}] Processing error: {str(e)}")
+            logger.exception(f"[{request_id}] Processing error")
 
             # Check if we've exceeded max retries - if so, mark as FAILED
             if self.request.retries >= self.max_retries:

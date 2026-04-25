@@ -32,6 +32,97 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def validate_path_component(component: str, component_name: str = "path") -> str:
+    """
+    Validate a path component to prevent directory traversal attacks.
+
+    Checks for:
+    - Path traversal sequences (.., ., ~)
+    - Absolute paths
+    - Null bytes
+    - Shell special characters
+
+    Args:
+        component: The path component to validate
+        component_name: Name for error messages
+
+    Returns:
+        The validated component
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    if not component:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_path", "message": f"{component_name} cannot be empty"}
+        )
+
+    # Check for null bytes (can bypass security checks)
+    if '\x00' in component:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_path", "message": f"{component_name} contains invalid characters"}
+        )
+
+    # Check for path traversal sequences
+    dangerous_patterns = ['..', './', '/.', '~', '\\']
+    for pattern in dangerous_patterns:
+        if pattern in component:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "invalid_path", "message": f"{component_name} contains invalid path sequence"}
+            )
+
+    # Check for absolute paths
+    if component.startswith('/') or component.startswith('\\'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_path", "message": f"{component_name} cannot be absolute path"}
+        )
+
+    # Check for shell special characters
+    shell_chars = ['|', ';', '&', '$', '`', '>', '<', '!', '*', '?', '[', ']', '{', '}']
+    for char in shell_chars:
+        if char in component:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "invalid_path", "message": f"{component_name} contains invalid characters"}
+            )
+
+    return component
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize a filename to prevent security issues.
+
+    Args:
+        filename: The original filename
+
+    Returns:
+        A safe filename with only alphanumeric, dash, underscore, and dot characters
+    """
+    if not filename:
+        return "unnamed"
+
+    # Get just the filename part (no directory components)
+    filename = os.path.basename(filename)
+
+    # Validate path component
+    validate_path_component(filename, "filename")
+
+    # Additional sanitization: only allow safe characters
+    safe_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.')
+    sanitized = ''.join(c if c in safe_chars else '_' for c in filename)
+
+    # Ensure it doesn't start with a dot (hidden file)
+    if sanitized.startswith('.'):
+        sanitized = '_' + sanitized[1:]
+
+    return sanitized or "unnamed"
+
+
 def generate_request_id() -> str:
     """Generate a unique request ID."""
     return f"REQ-{uuid.uuid4().hex[:8].upper()}"
@@ -206,6 +297,9 @@ async def upload_document(
     """
     logger.info(f"[UPLOAD] Starting document upload for request: {request_id}")
 
+    # 0. Validate request_id format to prevent path traversal
+    validate_path_component(request_id, "request_id")
+
     # 1. Check request exists
     logger.info(f"[UPLOAD] Step 1: Verifying request {request_id} exists...")
     request = await db.execute(
@@ -234,9 +328,10 @@ async def upload_document(
         )
     logger.info(f"[UPLOAD] SUCCESS: Request is in correct status for upload")
 
-    # 3. Validate file type
-    file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else ""
-    logger.info(f"[UPLOAD] Step 3: Validating file type: {file_ext}...")
+    # 3. Sanitize and validate filename, then check file type
+    safe_filename = sanitize_filename(file.filename or "")
+    file_ext = os.path.splitext(safe_filename)[1].lower()
+    logger.info(f"[UPLOAD] Step 3: Validating file type: {file_ext} (original: {file.filename})...")
     if file_ext not in settings.ALLOWED_EXTENSIONS:
         logger.warning(f"[UPLOAD] FAILED: File type {file_ext} not allowed")
         raise HTTPException(
@@ -264,72 +359,106 @@ async def upload_document(
         )
     logger.info(f"[UPLOAD] SUCCESS: File size {file_size_mb:.2f}MB is within limit")
 
-    # 5. Save file to storage
+    # 5. Prepare file path (but don't write yet - transaction safety)
     document_id = f"DOC-{uuid.uuid4().hex[:8].upper()}"
     storage_dir = f"{settings.STORAGE_PATH}/uploads/{request_id}"
-    os.makedirs(storage_dir, exist_ok=True)
-
     file_path = f"{storage_dir}/{document_id}{file_ext}"
-    logger.info(f"[UPLOAD] Step 5: Saving file to {file_path}...")
-    with open(file_path, "wb") as f:
-        f.write(content)
-    logger.info(f"[UPLOAD] SUCCESS: File saved as {document_id}")
+    file_saved = False
 
-    # 6. Update request
-    logger.info(f"[UPLOAD] Step 6: Updating request status to VALIDATED...")
-    request.document_storage_path = file_path
-    request.status = RequestStatus.VALIDATED
-    request.validated_at = datetime.utcnow()
+    try:
+        # 6. Update request in database FIRST (within transaction)
+        logger.info(f"[UPLOAD] Step 6: Updating request status to VALIDATED...")
+        request.document_storage_path = file_path
+        request.status = RequestStatus.VALIDATED
+        request.validated_at = datetime.utcnow()
 
-    # 7. Create audit log
-    logger.info(f"[UPLOAD] Step 7: Creating audit log entry...")
-    audit = AuditLog.create(
-        request_id=request_id,
-        event_type=EventType.STATE_CHANGE,
-        actor_type=ActorType.HUMAN,
-        actor_id="staff_user",
-        previous_state=RequestStatus.INTAKE_RECEIVED.value,
-        new_state=RequestStatus.VALIDATED.value,
-        action_details={
-            "action": "upload_document",
-            "document_id": document_id,
-            "file_name": file.filename,
-            "file_size_mb": round(file_size_mb, 2),
-        },
-    )
-    db.add(audit)
+        # 7. Create audit log for document upload
+        logger.info(f"[UPLOAD] Step 7: Creating audit log entry...")
+        audit = AuditLog.create(
+            request_id=request_id,
+            event_type=EventType.STATE_CHANGE,
+            actor_type=ActorType.HUMAN,
+            actor_id="staff_user",
+            previous_state=RequestStatus.INTAKE_RECEIVED.value,
+            new_state=RequestStatus.VALIDATED.value,
+            action_details={
+                "action": "upload_document",
+                "document_id": document_id,
+                "file_name": safe_filename,  # Use sanitized filename
+                "original_file_name": file.filename,  # Keep original for reference
+                "file_size_mb": round(file_size_mb, 2),
+            },
+        )
+        db.add(audit)
 
-    await db.commit()
+        # 8. Queue for processing - update status and create audit log
+        logger.info(f"[UPLOAD] Step 8: Queueing for AI processing...")
+        request.status = RequestStatus.QUEUED
 
-    # 8. Queue for processing - dispatch Celery task
-    logger.info(f"[UPLOAD] Step 8: Dispatching Celery task for AI processing...")
-    request.status = RequestStatus.QUEUED
+        # Import Celery task (but don't dispatch yet)
+        from app.workers.tasks import process_document
 
-    # Import and dispatch Celery task
-    from app.workers.tasks import process_document
-    task = process_document.delay(request_id)
-    logger.info(f"[UPLOAD] Celery task dispatched: {task.id}")
+        audit2 = AuditLog.create(
+            request_id=request_id,
+            event_type=EventType.SYSTEM_EVENT,
+            actor_type=ActorType.SYSTEM,
+            actor_id="intake_service",
+            previous_state=RequestStatus.VALIDATED.value,
+            new_state=RequestStatus.QUEUED.value,
+            action_details={"action": "queue_for_processing"},
+        )
+        db.add(audit2)
 
-    audit2 = AuditLog.create(
-        request_id=request_id,
-        event_type=EventType.SYSTEM_EVENT,
-        actor_type=ActorType.SYSTEM,
-        actor_id="intake_service",
-        previous_state=RequestStatus.VALIDATED.value,
-        new_state=RequestStatus.QUEUED.value,
-        action_details={"action": "queue_for_processing", "celery_task_id": task.id},
-    )
-    db.add(audit2)
+        # 9. Commit the database transaction
+        await db.commit()
+        logger.info(f"[UPLOAD] SUCCESS: Database transaction committed")
 
-    await db.commit()
-    logger.info(f"[UPLOAD] SUCCESS: Document uploaded and request {request_id} queued for AI processing")
+        # 10. ONLY after successful DB commit, save the file to disk
+        # This ensures we don't have orphan files if DB fails
+        logger.info(f"[UPLOAD] Step 10: Saving file to {file_path}...")
+        os.makedirs(storage_dir, exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(content)
+        file_saved = True
+        logger.info(f"[UPLOAD] SUCCESS: File saved as {document_id}")
 
-    return UploadResponse(
-        request_id=request_id,
-        status=RequestStatus.QUEUED,
-        document_id=document_id,
-        message="Document uploaded. Processing will begin shortly."
-    )
+        # 11. Dispatch Celery task AFTER file is saved
+        task = process_document.delay(request_id)
+        logger.info(f"[UPLOAD] Celery task dispatched: {task.id}")
+
+        # Update audit with task ID (non-critical, don't fail if this fails)
+        try:
+            audit2.action_details["celery_task_id"] = task.id
+            await db.commit()
+        except Exception:
+            pass  # Non-critical update
+
+        logger.info(f"[UPLOAD] SUCCESS: Document uploaded and request {request_id} queued for AI processing")
+
+        return UploadResponse(
+            request_id=request_id,
+            status=RequestStatus.QUEUED,
+            document_id=document_id,
+            message="Document uploaded. Processing will begin shortly."
+        )
+
+    except Exception as e:
+        # Rollback database changes
+        await db.rollback()
+        logger.exception(f"[UPLOAD] FAILED: Transaction rolled back due to error")
+
+        # Clean up file if it was saved
+        if file_saved and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logger.info(f"[UPLOAD] Cleaned up orphan file: {file_path}")
+            except Exception as cleanup_err:
+                logger.warning(f"[UPLOAD] Failed to clean up file: {cleanup_err}")
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "upload_failed", "message": str(e)}
+        )
 
 
 @router.get(

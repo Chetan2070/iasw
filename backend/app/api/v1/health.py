@@ -5,6 +5,7 @@ Provides health and readiness checks for the application.
 """
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 import redis.asyncio as redis
@@ -12,6 +13,7 @@ import redis.asyncio as redis
 from app.db.session import get_db
 from app.config import settings
 from app.schemas.common import HealthResponse
+from app.metrics import get_metrics
 
 router = APIRouter()
 
@@ -73,3 +75,23 @@ async def liveness_check():
     Returns 200 if the application is alive.
     """
     return {"alive": True}
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text format for scraping.
+
+    Metrics include:
+    - Request counts and latency
+    - Document processing times
+    - OCR confidence scores
+    - Forgery detection scores
+    - Queue sizes
+    - Decision counts
+    - Error counts
+    - LLM usage
+    """
+    return get_metrics()

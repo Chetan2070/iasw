@@ -169,7 +169,7 @@ async def extractor_node(state: ProcessingState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"[{request_id}] Extraction failed: {str(e)}")
+        logger.exception(f"[{request_id}] Extraction failed")
 
         return {
             "extracted_fields": {},

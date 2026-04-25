@@ -13,11 +13,13 @@ from datetime import datetime
 from typing import Dict, Any
 
 from langgraph.graph import StateGraph, END
+from typing import Optional, Callable
 
 from app.agents.state import ProcessingState, create_initial_state
 from app.agents.nodes.validation import validation_node, route_after_validation
 from app.agents.nodes.ocr import ocr_node, fallback_ocr_node, route_after_ocr
-from app.agents.nodes.classifier import classifier_node
+from app.agents.nodes.metadata import metadata_node
+from app.agents.nodes.classifier import classifier_node, route_after_classifier
 from app.agents.nodes.extractor import extractor_node
 from app.agents.nodes.forgery import forgery_node
 from app.agents.nodes.scorer import scorer_node
@@ -55,29 +57,38 @@ def build_processing_graph() -> StateGraph:
           │
           │ PASS
           ▼
-        ocr ─── LOW_CONF ──▶ fallback_ocr
-          │                      │
-          │ OK                   │
-          ▼                      │
-        classifier ◀─────────────┘
+        parallel_start (runs OCR + metadata concurrently)
           │
-          ▼
-        extractor
-          │
-          ▼
-        forgery
-          │
-          ▼
-        scorer
-          │
-          ▼
-        summary
-          │
-          ▼
-        save_results
-          │
-          ▼
-         END
+          ├── ocr ─── LOW_CONF ──▶ fallback_ocr
+          │                            │
+          └── metadata                 │
+                 │                     │
+                 └─────────┬───────────┘
+                           ▼
+                       classifier ─── DOC_TYPE_MISMATCH ──┐
+                           │                              │
+                           │ OK                           │
+                           ▼                              │
+                       extractor                          │
+                           │                              │
+                           ▼                              │
+                        forgery                           │
+                           │                              │
+                           └──────────┬───────────────────┘
+                                      ▼
+                                   scorer
+                                      │
+                                      ▼
+                                   summary
+                                      │
+                                      ▼
+                                save_results
+                                      │
+                                      ▼
+                                     END
+
+    Note: OCR and metadata run sequentially for simplicity (true LangGraph
+    parallelism requires Send API). Metadata is fast (~10ms) so impact is minimal.
 
     Returns:
         Compiled StateGraph
@@ -87,6 +98,7 @@ def build_processing_graph() -> StateGraph:
 
     # Add nodes
     graph.add_node("validation", validation_node)
+    graph.add_node("metadata", metadata_node)  # Runs before OCR (fast, ~10ms)
     graph.add_node("ocr", ocr_node)
     graph.add_node("fallback_ocr", fallback_ocr_node)
     graph.add_node("classifier", classifier_node)
@@ -104,10 +116,13 @@ def build_processing_graph() -> StateGraph:
         "validation",
         route_after_validation,
         {
-            "continue": "ocr",
+            "continue": "metadata",  # Run metadata first (fast)
             "fail": END,
         }
     )
+
+    # Metadata leads to OCR
+    graph.add_edge("metadata", "ocr")
 
     # Add conditional edges from OCR
     graph.add_conditional_edges(
@@ -122,8 +137,18 @@ def build_processing_graph() -> StateGraph:
     # Fallback OCR leads to classifier
     graph.add_edge("fallback_ocr", "classifier")
 
-    # Sequential edges for the rest of the pipeline
-    graph.add_edge("classifier", "extractor")
+    # Add conditional edges from classifier (dynamic routing)
+    # Skip forgery detection if document type doesn't match
+    graph.add_conditional_edges(
+        "classifier",
+        route_after_classifier,
+        {
+            "continue": "extractor",      # Normal flow
+            "skip_forgery": "scorer",     # Skip forgery on type mismatch
+        }
+    )
+
+    # Extractor leads to forgery (normal flow)
     graph.add_edge("extractor", "forgery")
     graph.add_edge("forgery", "scorer")
     graph.add_edge("scorer", "summary")
@@ -141,6 +166,21 @@ class DocumentProcessingPipeline:
     methods for running the pipeline.
     """
 
+    # Human-readable step names for UI display
+    STEP_DISPLAY_NAMES = {
+        "validation": "Validating Document",
+        "metadata": "Extracting Metadata",
+        "ocr": "Running OCR",
+        "fallback_ocr": "Running Fallback OCR",
+        "classifier": "Classifying Document",
+        "extractor": "Extracting Fields",
+        "forgery": "Detecting Forgery",
+        "scorer": "Calculating Scores",
+        "summary": "Generating Summary",
+        "save_results": "Finalizing Results",
+        "complete": "AI Verification Complete",
+    }
+
     def __init__(self):
         """Initialize the pipeline."""
         self.graph = build_processing_graph()
@@ -156,6 +196,7 @@ class DocumentProcessingPipeline:
         requested_old_value: str,
         requested_new_value: str,
         document_path: str,
+        on_step_change: Optional[Callable[[str, str], None]] = None,
     ) -> ProcessingState:
         """
         Process a document through the pipeline.
@@ -168,6 +209,7 @@ class DocumentProcessingPipeline:
             requested_old_value: Current value to change
             requested_new_value: New value requested
             document_path: Path to the uploaded document
+            on_step_change: Optional callback(request_id, step_display_name) called when step changes
 
         Returns:
             Final ProcessingState with all results
@@ -185,14 +227,48 @@ class DocumentProcessingPipeline:
             document_path=document_path,
         )
 
-        # Run the graph
+        # Run the graph with streaming to track step changes
         try:
-            final_state = await self.compiled_graph.ainvoke(initial_state)
+            final_state = None
+            last_step = None
+
+            async for event in self.compiled_graph.astream(initial_state):
+                # event is a dict with node name as key and output as value
+                for node_name, node_output in event.items():
+                    # Get current step from output or use node name
+                    current_step = node_output.get('current_step', node_name) if isinstance(node_output, dict) else node_name
+
+                    # Update step if changed
+                    if current_step != last_step:
+                        display_name = self.STEP_DISPLAY_NAMES.get(current_step, current_step.replace('_', ' ').title())
+                        logger.info(f"[{request_id}] Step: {display_name}")
+
+                        if on_step_change:
+                            try:
+                                on_step_change(request_id, display_name)
+                            except Exception as e:
+                                logger.warning(f"[{request_id}] Failed to update step callback: {e}")
+
+                        last_step = current_step
+
+                    # Keep track of state updates
+                    if isinstance(node_output, dict):
+                        if final_state is None:
+                            final_state = dict(initial_state)
+                        final_state.update(node_output)
+
+            # Final step update
+            if on_step_change:
+                try:
+                    on_step_change(request_id, self.STEP_DISPLAY_NAMES.get("complete", "Complete"))
+                except Exception as e:
+                    logger.warning(f"[{request_id}] Failed to update final step callback: {e}")
+
             logger.info(f"[{request_id}] Pipeline completed successfully")
-            return final_state
+            return final_state or initial_state
 
         except Exception as e:
-            logger.error(f"[{request_id}] Pipeline failed: {str(e)}")
+            logger.exception(f"[{request_id}] Pipeline failed")
             # Return partial state with error
             initial_state['errors'] = initial_state.get('errors', []) + [str(e)]
             initial_state['current_step'] = 'failed'
@@ -223,21 +299,21 @@ class DocumentProcessingPipeline:
                │ OK                                    │
                ▼                                       │
         ┌─────────────┐ ◀──────────────────────────────┘
-        │ classifier  │
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │ extractor   │
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │  forgery    │
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
+        │ classifier  │ ─── DOC_TYPE_MISMATCH ─┐
+        └──────┬──────┘                        │
+               │ OK                            │
+               ▼                               │
+        ┌─────────────┐                        │
+        │ extractor   │                        │
+        └──────┬──────┘                        │
+               │                               │
+               ▼                               │
+        ┌─────────────┐                        │
+        │  forgery    │                        │
+        └──────┬──────┘                        │
+               │                               │
+               ▼                               │
+        ┌─────────────┐ ◀──────────────────────┘
         │   scorer    │
         └──────┬──────┘
                │

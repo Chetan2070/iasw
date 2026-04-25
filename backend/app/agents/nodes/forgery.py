@@ -267,6 +267,8 @@ async def forgery_node(state: ProcessingState) -> Dict[str, Any]:
 
     Input State:
         - document_path
+        - file_metadata (optional, from metadata node)
+        - metadata_flags (optional, from metadata node)
 
     Output State Updates:
         - forgery_score: float (0.0 = forged, 1.0 = authentic)
@@ -281,18 +283,44 @@ async def forgery_node(state: ProcessingState) -> Dict[str, Any]:
     logger.info(f"[{request_id}] Running forgery detection")
 
     try:
-        # Run all detection layers
-        metadata_score, metadata_details = analyze_metadata(document_path)
+        # Use pre-extracted metadata if available (from parallel metadata node)
+        # This avoids duplicate file reads
+        pre_extracted_metadata = state.get('file_metadata', {})
+        pre_extracted_flags = state.get('metadata_flags', [])
+
+        if pre_extracted_metadata:
+            # Use cached metadata analysis
+            metadata_score = 1.0
+            metadata_details = pre_extracted_metadata.copy()
+
+            # Apply penalties based on metadata flags
+            for flag in pre_extracted_flags:
+                if 'EDITED_WITH' in flag:
+                    metadata_score -= 0.3
+                    metadata_details['warning'] = f'Editing software detected: {flag}'
+                elif flag == 'FILE_MODIFIED_AFTER_CREATION':
+                    metadata_score -= 0.1
+                    metadata_details['note'] = 'Document was modified after creation'
+                elif flag == 'SUSPICIOUSLY_SMALL_FILE':
+                    metadata_score -= 0.1
+
+            metadata_score = max(0.0, metadata_score)
+            logger.debug(f"[{request_id}] Using pre-extracted metadata, score={metadata_score}")
+        else:
+            # Fall back to direct analysis if metadata not available
+            metadata_score, metadata_details = analyze_metadata(document_path)
+
+        # Run remaining detection layers
         ela_score, ela_details = analyze_ela(document_path)
         font_score, font_details = analyze_font_consistency(document_path)
         ml_score, ml_details = analyze_ml_model(document_path)
 
-        # Calculate weighted score
+        # Calculate weighted score using configurable weights
         weights = {
-            'metadata': 0.20,
-            'ela': 0.30,
-            'font': 0.20,
-            'ml': 0.30,
+            'metadata': settings.FORGERY_WEIGHT_METADATA,
+            'ela': settings.FORGERY_WEIGHT_ELA,
+            'font': settings.FORGERY_WEIGHT_FONT,
+            'ml': settings.FORGERY_WEIGHT_ML,
         }
 
         forgery_score = (
@@ -317,9 +345,10 @@ async def forgery_node(state: ProcessingState) -> Dict[str, Any]:
             'font': {'score': float(font_score), 'details': font_details},
             'ml': {'score': float(ml_score), 'details': ml_details},
             'weights': weights,
+            'used_cached_metadata': bool(pre_extracted_metadata),
         }
 
-        # Update flags
+        # Update flags - merge metadata flags
         flags = list(state.get('flags', []))
         if forgery_result in ["FLAG", "FAIL"]:
             flags.append("FORGERY_FLAG")
@@ -337,7 +366,7 @@ async def forgery_node(state: ProcessingState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"[{request_id}] Forgery detection failed: {str(e)}")
+        logger.exception(f"[{request_id}] Forgery detection failed")
 
         return {
             "forgery_score": 0.7,  # Neutral score on error

@@ -3,20 +3,26 @@ Tools for Forgery Detection Agent
 
 Provides tools for detecting document tampering through multiple analysis layers:
 
-1. METADATA ANALYSIS
+1. METADATA ANALYSIS (20%)
    - Examines PDF/image metadata for suspicious editing software
    - Checks creation vs modification dates
    - Detects tools commonly used for document manipulation (Photoshop, GIMP, etc.)
 
-2. ERROR LEVEL ANALYSIS (ELA)
+2. ERROR LEVEL ANALYSIS (ELA) (30%)
    - Re-saves image at known quality and compares to original
    - Edited regions show different compression artifacts
    - Higher variance in difference = potential tampering
 
-3. FONT CONSISTENCY
+3. FONT CONSISTENCY (20%)
    - Analyzes fonts used throughout the document
    - Legitimate documents typically use 1-3 consistent fonts
    - Many different fonts may indicate copy-paste from multiple sources
+
+4. ML MODEL (30%)
+   - Pattern-based detection using file characteristics
+   - In production, would use a trained model
+
+Weights are configurable via settings.FORGERY_WEIGHT_* and must sum to 1.0
 """
 
 import os
@@ -25,6 +31,7 @@ import logging
 from PIL import Image
 
 from langchain_core.tools import tool
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -213,33 +220,43 @@ def analyze_font_consistency(file_path: str) -> dict:
 
 
 @tool
-def calculate_forgery_score(metadata_score: float, ela_score: float, font_score: float) -> dict:
+def calculate_forgery_score(metadata_score: float, ela_score: float, font_score: float, ml_score: float = 0.85) -> dict:
     """
     Calculate overall forgery score from individual layer scores.
 
     Scoring interpretation:
-    - 0.8-1.0: PASS - Document appears authentic, no signs of tampering
-    - 0.6-0.8: FLAG - Some indicators need review, proceed with caution
-    - 0.0-0.6: FAIL - Significant signs of tampering detected
+    - 0.85-1.0: PASS - Document appears authentic, no signs of tampering
+    - 0.60-0.85: FLAG - Some indicators need review, proceed with caution
+    - 0.0-0.60: FAIL - Significant signs of tampering detected
+
+    Weights are loaded from config (settings.FORGERY_WEIGHT_*) and must sum to 1.0:
+    - Metadata: 20% - Editing software detection
+    - ELA: 30% - Error Level Analysis detects edits
+    - Font: 20% - Font consistency check
+    - ML: 30% - ML-based pattern detection
 
     Args:
         metadata_score: Score from metadata analysis (0-1, higher = more authentic)
         ela_score: Score from ELA analysis (0-1, higher = more authentic)
         font_score: Score from font analysis (0-1, higher = more authentic)
+        ml_score: Score from ML model (0-1, higher = more authentic), defaults to 0.85
 
     Returns:
         Combined forgery assessment with explanation
     """
+    # Use configurable weights
     weights = {
-        'metadata': 0.25,
-        'ela': 0.40,
-        'font': 0.35,
+        'metadata': settings.FORGERY_WEIGHT_METADATA,
+        'ela': settings.FORGERY_WEIGHT_ELA,
+        'font': settings.FORGERY_WEIGHT_FONT,
+        'ml': settings.FORGERY_WEIGHT_ML,
     }
 
     overall_score = (
         metadata_score * weights['metadata'] +
         ela_score * weights['ela'] +
-        font_score * weights['font']
+        font_score * weights['font'] +
+        ml_score * weights['ml']
     )
 
     # Determine result and generate explanation
@@ -266,10 +283,18 @@ def calculate_forgery_score(metadata_score: float, ela_score: float, font_score:
     else:
         explanations.append("Excessive font variation detected, possibly indicating content from multiple sources.")
 
-    if overall_score >= 0.8:
+    if ml_score >= 0.9:
+        explanations.append("ML analysis indicates authentic document patterns.")
+    elif ml_score >= 0.7:
+        explanations.append("ML analysis shows minor anomalies but within tolerance.")
+    else:
+        explanations.append("ML analysis detects patterns consistent with document manipulation.")
+
+    # Use configurable thresholds
+    if overall_score >= settings.FORGERY_PASS_THRESHOLD:
         result = "PASS"
         assessment = "Document appears authentic. " + " ".join(explanations)
-    elif overall_score >= 0.6:
+    elif overall_score >= settings.FORGERY_FAIL_THRESHOLD:
         result = "FLAG"
         assessment = "Some indicators require human review. " + " ".join(explanations)
     else:
@@ -283,6 +308,8 @@ def calculate_forgery_score(metadata_score: float, ela_score: float, font_score:
         flags.append("ELA_ANOMALY")
     if font_score < 0.7:
         flags.append("FONT_INCONSISTENCY")
+    if ml_score < 0.7:
+        flags.append("ML_ANOMALY")
     if result in ["FLAG", "FAIL"]:
         flags.append("FORGERY_FLAG")
 
@@ -295,11 +322,13 @@ def calculate_forgery_score(metadata_score: float, ela_score: float, font_score:
             "metadata": float(metadata_score),
             "ela": float(ela_score),
             "font": float(font_score),
+            "ml": float(ml_score),
         },
         "layer_explanations": {
             "metadata": explanations[0],
             "ela": explanations[1],
             "font": explanations[2],
+            "ml": explanations[3],
         },
         "weights": weights,
     }

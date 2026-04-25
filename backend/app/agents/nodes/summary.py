@@ -165,7 +165,7 @@ Generate a 2-3 sentence summary for the human reviewer."""
         }
 
     except Exception as e:
-        logger.error(f"[{request_id}] Summary generation failed: {str(e)}")
+        logger.exception(f"[{request_id}] Summary generation failed")
 
         # Generate better fallback summary
         recommendation = determine_recommendation(state)

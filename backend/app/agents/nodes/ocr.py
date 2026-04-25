@@ -84,7 +84,7 @@ def extract_text_from_image(image_path: str) -> Tuple[str, float, List[dict]]:
         return text, avg_confidence, word_data
 
     except Exception as e:
-        logger.error(f"OCR error: {str(e)}")
+        logger.exception("OCR error")
         raise
 
 
@@ -149,7 +149,7 @@ def extract_text_from_pdf(pdf_path: str) -> Tuple[str, float, List[dict], int]:
         return combined_text, avg_confidence, all_word_data, pages_processed
 
     except Exception as e:
-        logger.error(f"PDF extraction error: {str(e)}")
+        logger.exception("PDF extraction error")
         raise
 
 
@@ -214,7 +214,7 @@ async def ocr_node(state: ProcessingState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"[{request_id}] OCR failed: {str(e)}")
+        logger.exception(f"[{request_id}] OCR failed")
         return {
             "ocr_text": "",
             "ocr_confidence": 0.0,

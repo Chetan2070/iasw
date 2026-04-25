@@ -82,7 +82,7 @@ export default function ReviewPage() {
     return () => {
       cancelled = true;
       if (!readonly && reviewDataRef.current?.assigned_checker === checkerId) {
-        checkerApi.release(requestId, checkerId).catch((err) => {
+        checkerApi.release(requestId).catch((err) => {
           console.error("Failed to release on exit:", err);
         });
       }
@@ -93,7 +93,10 @@ export default function ReviewPage() {
     if (readonly) return;
 
     const handleBeforeUnload = () => {
-      const url = `/api/v1/checker/release/${requestId}?checker_id=${checkerId}`;
+      // Use sendBeacon for cleanup on page unload
+      // Note: This still needs the checker_id in URL for sendBeacon
+      // since we can't use Bearer auth with sendBeacon easily
+      const url = `/api/v1/checker/release/${requestId}`;
       navigator.sendBeacon(url);
     };
 
@@ -106,7 +109,7 @@ export default function ReviewPage() {
   const handleBack = async () => {
     if (!readonly) {
       try {
-        await checkerApi.release(requestId, checkerId);
+        await checkerApi.release(requestId);
       } catch (err) {
         console.error("Failed to release:", err);
       }
@@ -127,7 +130,7 @@ export default function ReviewPage() {
 
     setSubmitting(true);
     try {
-      await checkerApi.submitDecision(requestId, checkerId, {
+      await checkerApi.submitDecision(requestId, {
         decision,
         reason: reason.trim() || undefined,
       });
@@ -146,7 +149,7 @@ export default function ReviewPage() {
   const handleRelease = async () => {
     if (confirm("Release this request back to the queue?")) {
       try {
-        await checkerApi.release(requestId, checkerId);
+        await checkerApi.release(requestId);
         success("Released", "Request returned to queue.");
         router.push("/checker/queue");
       } catch (err: any) {

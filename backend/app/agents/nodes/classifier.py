@@ -127,7 +127,7 @@ async def classifier_node(state: ProcessingState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"[{request_id}] Classification failed: {str(e)}")
+        logger.exception(f"[{request_id}] Classification failed")
 
         # Return default values on error
         return {
@@ -138,3 +138,26 @@ async def classifier_node(state: ProcessingState) -> Dict[str, Any]:
             "errors": state.get('errors', []) + [f"Classification failed: {str(e)}"],
             "current_step": "classifier",
         }
+
+
+def route_after_classifier(state: ProcessingState) -> str:
+    """
+    Route based on classification result.
+
+    Routing logic:
+    - If DOC_TYPE_MISMATCH flag is set, skip forgery detection (no point checking
+      for forgery on wrong document type) and go straight to scorer
+    - Otherwise, continue to extractor as normal
+
+    Returns:
+        "skip_forgery" if document type mismatch detected
+        "continue" for normal flow to extractor
+    """
+    flags = state.get('flags', [])
+
+    if "DOC_TYPE_MISMATCH" in flags:
+        request_id = state.get('request_id', 'unknown')
+        logger.info(f"[{request_id}] Skipping forgery detection due to document type mismatch")
+        return "skip_forgery"
+
+    return "continue"

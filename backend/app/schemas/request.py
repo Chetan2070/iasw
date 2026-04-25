@@ -119,7 +119,7 @@ class ExtractionDetail(BaseModel):
     """Details of a single extracted field."""
 
     field_name: str
-    value: str
+    value: Optional[str] = None
     confidence: float
     source_snippet: Optional[str] = None
 

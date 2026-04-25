@@ -34,12 +34,19 @@ class ProcessingState(TypedDict, total=False):
 
    
     # OCR Output
-   
+
     ocr_text: str
     ocr_confidence: float
     ocr_word_confidences: List[dict]
     ocr_method: str  # "tesseract" or "google_vision"
     ocr_pages_processed: int
+
+
+    # Metadata Analysis Output (runs in parallel with OCR)
+
+    file_metadata: dict  # EXIF, PDF metadata, etc.
+    file_stats: dict  # File system stats (size, dates)
+    metadata_flags: List[str]  # Suspicious patterns found
 
    
     # Classification Output
@@ -119,6 +126,9 @@ def create_initial_state(
         ocr_word_confidences=[],
         ocr_method="",
         ocr_pages_processed=0,
+        file_metadata={},
+        file_stats={},
+        metadata_flags=[],
         detected_document_type="",
         classification_confidence=0.0,
         classification_match=False,

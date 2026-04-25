@@ -96,11 +96,24 @@ def create_supervisor_graph():
     forgery_agent = create_forgery_agent()
     scorer_agent = create_scorer_agent()
 
+    # Human-readable step names for UI display
+    STEP_DISPLAY_NAMES = {
+        "validation": "Validating Document",
+        "ocr": "Running OCR",
+        "classifier": "Classifying Document",
+        "extractor": "Extracting Fields",
+        "forgery": "Detecting Forgery",
+        "scorer": "Calculating Scores",
+        "summary": "Generating Summary",
+        "complete": "AI Verification Complete",
+    }
+
     def update_step_in_db(request_id: str, step: str):
         """Update the current processing step in DB for real-time updates."""
         try:
             from app.workers.tasks import update_processing_step
-            update_processing_step(request_id, step)
+            display_name = STEP_DISPLAY_NAMES.get(step, step.replace('_', ' ').title())
+            update_processing_step(request_id, display_name)
         except Exception as e:
             logger.warning(f"[{request_id}] Could not update step in DB: {e}")
 
@@ -556,6 +569,9 @@ Keep it professional and concise. Do not use markdown formatting."""
                 summary_parts.append(f"Flags: {', '.join(flags)}")
 
             ai_summary = " | ".join(summary_parts)
+
+        # Update step to show completion
+        update_step_in_db(request_id, "complete")
 
         return {
             "ai_summary": ai_summary,

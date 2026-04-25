@@ -7,31 +7,32 @@ Main application factory and startup configuration.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 
 from app.config import settings
 from app.api.v1.router import api_router
 from app.db.session import init_db
+from app.logging_config import setup_logging, get_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Initialize structured logging
+setup_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
-    logger.info(f"Starting {settings.APP_NAME} v1.0.0")
-    logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"Debug mode: {settings.DEBUG}")
+    logger.info(
+        "application_starting",
+        app_name=settings.APP_NAME,
+        version="1.0.0",
+        environment=settings.ENVIRONMENT,
+        debug=settings.DEBUG,
+    )
 
     # Initialize database
     await init_db()
-    logger.info("Database initialized")
+    logger.info("database_initialized")
 
     # Create storage directories
     import os
@@ -40,12 +41,12 @@ async def lifespan(app: FastAPI):
     os.makedirs(f"{settings.STORAGE_PATH}/staging", exist_ok=True)
     os.makedirs(f"{settings.STORAGE_PATH}/approved", exist_ok=True)
     os.makedirs(f"{settings.STORAGE_PATH}/rejected", exist_ok=True)
-    logger.info(f"Storage directories created at {settings.STORAGE_PATH}")
+    logger.info("storage_initialized", path=settings.STORAGE_PATH)
 
     yield
 
     # Shutdown
-    logger.info("Shutting down application")
+    logger.info("application_shutting_down")
 
 
 def create_application() -> FastAPI:

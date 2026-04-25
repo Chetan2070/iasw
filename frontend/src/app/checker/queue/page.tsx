@@ -75,7 +75,7 @@ function QueuePageContent() {
   const handleClaim = async (requestId: string) => {
     setClaiming(requestId);
     try {
-      await checkerApi.claim(requestId, checkerId);
+      await checkerApi.claim(requestId);
       router.push(`/checker/review/${requestId}`);
     } catch (error: any) {
       console.error("Failed to claim request:", error);

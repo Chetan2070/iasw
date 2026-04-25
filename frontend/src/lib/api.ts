@@ -231,18 +231,12 @@ export const checkerApi = {
   },
 
   /**
-   * Claim a request for review
+   * Claim a request for review.
+   * Checker ID is extracted from the JWT token automatically.
    */
-  claim: async (
-    requestId: string,
-    checkerId: string
-  ): Promise<ClaimResponse> => {
+  claim: async (requestId: string): Promise<ClaimResponse> => {
     const response = await api.post<ClaimResponse>(
-      `/checker/claim/${requestId}`,
-      null,
-      {
-        params: { checker_id: checkerId },
-      }
+      `/checker/claim/${requestId}`
     );
     return response.data;
   },
@@ -256,41 +250,34 @@ export const checkerApi = {
   },
 
   /**
-   * Submit decision on a request
+   * Submit decision on a request.
+   * Checker ID is extracted from the JWT token automatically.
    */
   submitDecision: async (
     requestId: string,
-    checkerId: string,
     decision: DecisionRequest
   ): Promise<DecisionResponse> => {
     const response = await api.post<DecisionResponse>(
       `/checker/decide/${requestId}`,
-      decision,
-      {
-        params: { checker_id: checkerId },
-      }
+      decision
     );
     return response.data;
   },
 
   /**
-   * Release a claimed request
+   * Release a claimed request.
+   * Checker ID is extracted from the JWT token automatically.
    */
-  release: async (
-    requestId: string,
-    checkerId: string
-  ): Promise<{ message: string }> => {
-    const response = await api.post(`/checker/release/${requestId}`, null, {
-      params: { checker_id: checkerId },
-    });
+  release: async (requestId: string): Promise<{ message: string }> => {
+    const response = await api.post(`/checker/release/${requestId}`);
     return response.data;
   },
 
   /**
-   * Get review history for a checker
+   * Get review history for the authenticated checker.
+   * Checker ID is extracted from the JWT token automatically.
    */
   getReviewHistory: async (
-    checkerId: string,
     params?: { page?: number; limit?: number }
   ): Promise<{
     items: Array<{
@@ -310,9 +297,7 @@ export const checkerApi = {
     page: number;
     limit: number;
   }> => {
-    const response = await api.get("/checker/reviews", {
-      params: { checker_id: checkerId, ...params },
-    });
+    const response = await api.get("/checker/reviews", { params });
     return response.data;
   },
 };
@@ -321,6 +306,92 @@ export const checkerApi = {
 export const healthApi = {
   check: async (): Promise<{ status: string; environment: string }> => {
     const response = await api.get("/health");
+    return response.data;
+  },
+};
+
+// Admin APIs
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  role: "admin" | "staff" | "checker";
+  is_active: boolean;
+  created_at: string | null;
+  last_login: string | null;
+}
+
+export interface AdminUserStats {
+  total: number;
+  admin: number;
+  staff: number;
+  checker: number;
+  active: number;
+  inactive: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string | null;
+  request_id: string;
+  event_type: string | null;
+  actor_type: string | null;
+  actor_id: string;
+  previous_state: string | null;
+  new_state: string | null;
+  agent_name: string | null;
+  action_details: Record<string, unknown> | null;
+}
+
+export interface AuditLogStats {
+  total: number;
+  human: number;
+  ai: number;
+  system: number;
+  unique_users: number;
+}
+
+export const adminApi = {
+  /**
+   * Get all users with optional filtering
+   */
+  getUsers: async (params?: {
+    search?: string;
+    role?: string;
+    status?: string;
+  }): Promise<{ users: AdminUser[]; stats: AdminUserStats }> => {
+    const response = await api.get("/admin/users", { params });
+    return response.data;
+  },
+
+  /**
+   * Get audit logs with pagination and filtering
+   */
+  getAuditLogs: async (params?: {
+    search?: string;
+    event_type?: string;
+    actor_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    logs: AuditLogEntry[];
+    pagination: {
+      page: number;
+      page_size: number;
+      total: number;
+      total_pages: number;
+    };
+    stats: AuditLogStats;
+  }> => {
+    const response = await api.get("/admin/audit-logs", { params });
+    return response.data;
+  },
+
+  /**
+   * Get all tables data (for database viewer)
+   */
+  getTables: async (): Promise<Record<string, { columns: string[]; rows: Record<string, unknown>[] }>> => {
+    const response = await api.get("/admin/tables");
     return response.data;
   },
 };
