@@ -34,13 +34,29 @@ export function RouteGuard({ children }: RouteGuardProps) {
 
     if (!isAuthenticated && !isPublicRoute) {
       // Redirect to login if not authenticated and trying to access protected route
-      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
 
     if (isAuthenticated && pathname === "/login") {
-      // Redirect authenticated users away from login page
-      router.push("/");
+      // Redirect authenticated users away from login page based on their role
+      if (user) {
+        switch (user.role) {
+          case "admin":
+            router.replace("/admin");
+            break;
+          case "staff":
+            router.replace("/staff");
+            break;
+          case "checker":
+            router.replace("/checker");
+            break;
+          default:
+            router.replace("/");
+        }
+      } else {
+        router.replace("/");
+      }
       return;
     }
 
@@ -50,7 +66,7 @@ export function RouteGuard({ children }: RouteGuardProps) {
         if (pathname.startsWith(route)) {
           if (!roles.includes(user.role)) {
             // Redirect to home if user doesn't have required role
-            router.push("/");
+            router.replace("/");
             return;
           }
           break;

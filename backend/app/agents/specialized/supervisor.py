@@ -6,21 +6,16 @@ A LangGraph supervisor that orchestrates specialized worker agents
 """
 
 import logging
-import operator
-from typing import TypedDict, Annotated, Sequence, Dict, Any, Literal
+from typing import TypedDict, Dict, Any, Optional, Callable
 from datetime import datetime
 
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, END
 
-from app.agents.state import ProcessingState, create_initial_state
 from app.agents.prompts import (
     OCR_AGENT_PROMPT,
     CLASSIFIER_AGENT_PROMPT,
-    EXTRACTOR_AGENT_PROMPT,
     FORGERY_AGENT_PROMPT,
-    SCORER_AGENT_PROMPT,
 )
 from app.agents.specialized.worker_agents import (
     create_ocr_agent,
@@ -29,7 +24,6 @@ from app.agents.specialized.worker_agents import (
     create_forgery_agent,
     create_scorer_agent,
 )
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -647,6 +641,7 @@ class SupervisorPipeline:
         requested_old_value: str,
         requested_new_value: str,
         document_path: str,
+        on_step_change: Optional[Callable[[str, str], None]] = None,
     ) -> Dict[str, Any]:
         """
         Process a document through the supervisor pipeline.
@@ -659,6 +654,7 @@ class SupervisorPipeline:
             requested_old_value: Current value
             requested_new_value: New value requested
             document_path: Path to document
+            on_step_change: Optional callback (ignored - supervisor handles steps internally)
 
         Returns:
             Final processing state

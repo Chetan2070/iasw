@@ -10,12 +10,15 @@ import {
   FileText,
   User,
   Shield,
-  Eye,
   MessageSquare,
   Loader2,
   Lock,
   Brain,
   TrendingUp,
+  ZoomIn,
+  ZoomOut,
+  Image as ImageIcon,
+  Eye,
 } from "lucide-react";
 import { checkerApi } from "@/lib/api";
 import {
@@ -48,6 +51,8 @@ export default function ReviewPage() {
   const [decision, setDecision] = useState<Decision | "">("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [documentZoom, setDocumentZoom] = useState(100);
+  const [showFullDocument, setShowFullDocument] = useState(false);
 
   const reviewDataRef = useRef<ReviewData | null>(null);
   useEffect(() => {
@@ -283,6 +288,77 @@ export default function ReviewPage() {
               </div>
             </div>
           </Card>
+
+          {/* Document Preview */}
+          {reviewData.document_url && (
+            <Card padding="lg">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5 text-gray-400" />
+                  Document Preview
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDocumentZoom(Math.max(25, documentZoom - 25))}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Zoom out"
+                  >
+                    <ZoomOut className="h-4 w-4 text-gray-500" />
+                  </button>
+                  <span className="text-sm text-gray-500 min-w-[4rem] text-center">{documentZoom}%</span>
+                  <button
+                    onClick={() => setDocumentZoom(Math.min(200, documentZoom + 25))}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Zoom in"
+                  >
+                    <ZoomIn className="h-4 w-4 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => setDocumentZoom(100)}
+                    className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded transition-colors ml-1"
+                    title="Reset zoom"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {/* Document viewer - scrollable container */}
+              <div
+                className="border border-gray-200 rounded-xl overflow-auto bg-gray-100"
+                style={{ maxHeight: '600px' }}
+              >
+                <div className="p-2">
+                  <img
+                    src={reviewData.document_url}
+                    alt="Uploaded document"
+                    className="mx-auto shadow-lg rounded bg-white"
+                    style={{
+                      width: `${documentZoom}%`,
+                      maxWidth: 'none',
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    draggable={false}
+                  />
+                </div>
+              </div>
+
+              {/* Quick reference panel */}
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-sm font-medium text-amber-800 mb-2">Verify these names match the document:</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-amber-600">Old Name (should appear in document)</p>
+                    <p className="font-semibold text-amber-900">{reviewData.requested_old_value}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-amber-600">New Name (should appear in document)</p>
+                    <p className="font-semibold text-amber-900">{reviewData.requested_new_value}</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Extracted Data */}
           <Card padding="lg">

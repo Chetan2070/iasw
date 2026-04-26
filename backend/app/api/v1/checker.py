@@ -572,7 +572,7 @@ async def get_review_data(
         flags=request.flags or [],
         ai_recommendation=request.ai_recommendation,
         ai_summary=request.ai_summary,
-        document_url=f"/api/v1/documents/{request.request_id}" if request.document_storage_path else None,
+        document_url=f"/api/v1/requests/{request.request_id}/document" if request.document_storage_path else None,
         filenet_reference=request.filenet_staging_id,
         created_at=request.created_at,
         staged_at=request.staged_at,

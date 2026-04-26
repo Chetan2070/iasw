@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -752,3 +753,90 @@ async def delete_request(
         "message": f"Request {request_id} deleted successfully",
         "request_id": request_id
     }
+
+
+@router.get(
+    "/{request_id}/document",
+    responses={
+        404: {"model": ErrorResponse, "description": "Document not found"},
+    }
+)
+async def get_document(
+    request_id: str,
+    download: bool = Query(False, description="Set to true to download instead of inline preview"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get the uploaded document for a request.
+
+    Returns the document file for preview (inline) or download.
+    Use ?download=true to force download instead of inline display.
+    """
+    logger.info(f"[DOCUMENT] Fetching document for request: {request_id}")
+
+    # Find the request
+    request = await db.execute(
+        select(Request).where(Request.request_id == request_id)
+    )
+    request = request.scalar_one_or_none()
+
+    if not request:
+        logger.warning(f"[DOCUMENT] FAILED: Request {request_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "request_not_found", "message": f"Request {request_id} not found"}
+        )
+
+    if not request.document_storage_path:
+        logger.warning(f"[DOCUMENT] FAILED: No document for request {request_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "document_not_found", "message": "No document has been uploaded for this request"}
+        )
+
+    # Check if file exists
+    file_path = request.document_storage_path
+    if not os.path.isabs(file_path):
+        # Relative paths are relative to backend directory
+        from app.config import BACKEND_DIR
+        file_path = os.path.join(BACKEND_DIR, file_path.lstrip('./'))
+
+    if not os.path.exists(file_path):
+        logger.warning(f"[DOCUMENT] FAILED: File not found at {file_path}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "file_not_found", "message": "Document file not found on server"}
+        )
+
+    # Determine content type based on file extension
+    ext = os.path.splitext(file_path)[1].lower()
+    content_type_map = {
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff',
+    }
+    content_type = content_type_map.get(ext, 'application/octet-stream')
+
+    logger.info(f"[DOCUMENT] SUCCESS: Serving document for request {request_id}")
+
+    # Use inline display by default, attachment (download) if requested
+    if download:
+        return FileResponse(
+            path=file_path,
+            media_type=content_type,
+            filename=os.path.basename(file_path)
+        )
+    else:
+        from starlette.responses import Response
+        with open(file_path, "rb") as f:
+            content = f.read()
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"inline; filename=\"{os.path.basename(file_path)}\""
+            }
+        )

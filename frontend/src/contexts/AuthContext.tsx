@@ -79,18 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStoredAuth(authData);
 
       // Redirect based on role
+      // Use router.replace to avoid adding to history stack
       switch (response.user.role) {
         case "admin":
-          router.push("/admin");
+          router.replace("/admin");
           break;
         case "staff":
-          router.push("/staff");
+          router.replace("/staff");
           break;
         case "checker":
-          router.push("/checker");
+          router.replace("/checker");
           break;
         default:
-          router.push("/");
+          router.replace("/");
       }
     },
     [router]

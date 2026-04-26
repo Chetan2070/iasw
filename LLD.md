@@ -1,6 +1,21 @@
 # Intelligent Account Servicing Workflow (IASW)
 ## Low-Level Design Document
 
+This document provides detailed implementation specifications including project structure, code components, API contracts, and configuration.
+
+---
+
+## Table of Contents
+
+1. [Project Structure](#1-project-structure)
+2. [Backend Components](#2-backend-components)
+3. [Frontend Components](#3-frontend-components)
+4. [LangGraph Pipeline](#4-langgraph-pipeline)
+5. [API Contracts](#5-api-contracts)
+6. [Database Schema](#6-database-schema)
+7. [Configuration](#7-configuration)
+8. [Error Handling](#8-error-handling)
+
 ---
 
 ## 1. Project Structure
@@ -11,1782 +26,707 @@ iasw/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── layout.tsx
-│   │   │   ├── page.tsx
-│   │   │   ├── staff/                    # Staff Portal
-│   │   │   │   ├── page.tsx              # Dashboard
-│   │   │   │   ├── requests/
-│   │   │   │   │   ├── page.tsx          # Request list
-│   │   │   │   │   ├── new/
-│   │   │   │   │   │   └── page.tsx      # New request form
-│   │   │   │   │   └── [id]/
-│   │   │   │   │       └── page.tsx      # Request details
-│   │   │   │   └── layout.tsx
-│   │   │   ├── checker/                  # Checker Workbench
-│   │   │   │   ├── page.tsx              # Queue dashboard
+│   │   │   ├── page.tsx              # Home portal
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx          # Sign in / Sign up
+│   │   │   ├── staff/                # Staff Portal
+│   │   │   │   ├── page.tsx          # Dashboard
+│   │   │   │   ├── layout.tsx
+│   │   │   │   └── requests/
+│   │   │   │       ├── page.tsx      # Request list
+│   │   │   │       ├── new/
+│   │   │   │       │   └── page.tsx  # New request form
+│   │   │   │       └── [id]/
+│   │   │   │           └── page.tsx  # Request details
+│   │   │   ├── checker/              # Checker Workbench
+│   │   │   │   ├── page.tsx          # Dashboard
+│   │   │   │   ├── layout.tsx
 │   │   │   │   ├── queue/
-│   │   │   │   │   └── page.tsx          # Request queue
-│   │   │   │   ├── review/
-│   │   │   │   │   └── [id]/
-│   │   │   │   │       └── page.tsx      # Review screen
-│   │   │   │   └── layout.tsx
-│   │   │   └── api/                      # API Routes (BFF)
-│   │   │       ├── requests/
-│   │   │       │   └── route.ts
-│   │   │       ├── checker/
-│   │   │       │   └── route.ts
-│   │   │       └── health/
-│   │   │           └── route.ts
+│   │   │   │   │   └── page.tsx      # Review queue
+│   │   │   │   ├── reviews/
+│   │   │   │   │   └── page.tsx      # Review history
+│   │   │   │   └── review/
+│   │   │   │       └── [requestId]/
+│   │   │   │           └── page.tsx  # Review screen
+│   │   │   └── admin/
+│   │   │       └── page.tsx          # Database viewer
 │   │   ├── components/
-│   │   │   ├── ui/                       # Shared UI components
-│   │   │   │   ├── Button.tsx
-│   │   │   │   ├── Card.tsx
-│   │   │   │   ├── Modal.tsx
-│   │   │   │   ├── Table.tsx
-│   │   │   │   ├── Badge.tsx
-│   │   │   │   ├── ProgressBar.tsx
-│   │   │   │   └── FileUpload.tsx
-│   │   │   ├── staff/                    # Staff-specific components
-│   │   │   │   ├── RequestForm.tsx
-│   │   │   │   ├── RequestList.tsx
-│   │   │   │   ├── DocumentUploader.tsx
-│   │   │   │   └── RequestStatus.tsx
-│   │   │   ├── checker/                  # Checker-specific components
-│   │   │   │   ├── QueueTable.tsx
-│   │   │   │   ├── ReviewPanel.tsx
-│   │   │   │   ├── DocumentViewer.tsx
-│   │   │   │   ├── ConfidenceScoreCard.tsx
-│   │   │   │   ├── AISummaryPanel.tsx
-│   │   │   │   ├── FlagsPanel.tsx
-│   │   │   │   ├── DecisionButtons.tsx
-│   │   │   │   └── ExtractedFieldsTable.tsx
-│   │   │   └── shared/
-│   │   │       ├── Header.tsx
-│   │   │       ├── Sidebar.tsx
-│   │   │       └── LoadingSpinner.tsx
+│   │   │   ├── ui/                   # Shared UI components
+│   │   │   ├── staff/                # Staff-specific
+│   │   │   └── checker/              # Checker-specific
 │   │   ├── hooks/
-│   │   │   ├── useRequest.ts
-│   │   │   ├── useQueue.ts
-│   │   │   ├── useWebSocket.ts
-│   │   │   └── useAuth.ts
+│   │   │   ├── useAuth.ts
+│   │   │   └── useApi.ts
 │   │   ├── lib/
-│   │   │   ├── api.ts                    # API client
-│   │   │   ├── constants.ts
-│   │   │   └── utils.ts
-│   │   ├── types/
-│   │   │   ├── request.ts
-│   │   │   ├── checker.ts
-│   │   │   └── api.ts
-│   │   └── styles/
-│   │       └── globals.css
-│   ├── public/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tailwind.config.js
+│   │   │   ├── api.ts                # API client
+│   │   │   └── auth.ts               # Auth utilities
+│   │   └── types/
+│   │       └── index.ts
+│   ├── tailwind.config.ts
 │   └── next.config.js
 │
 ├── backend/                      # FastAPI Application
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py                       # FastAPI entry point
-│   │   ├── config.py                     # Configuration settings
-│   │   ├── dependencies.py               # Dependency injection
+│   │   ├── main.py               # FastAPI entry point
+│   │   ├── config.py             # Configuration settings
+│   │   ├── dependencies.py       # Dependency injection
+│   │   ├── logging_config.py     # Structured logging setup
+│   │   ├── metrics.py            # Prometheus metrics
 │   │   │
-│   │   ├── api/                          # API Layer
-│   │   │   ├── __init__.py
+│   │   ├── api/                  # API Layer
 │   │   │   ├── v1/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── router.py             # Main router
-│   │   │   │   ├── requests.py           # Request endpoints
-│   │   │   │   ├── checker.py            # Checker endpoints
-│   │   │   │   ├── documents.py          # Document endpoints
-│   │   │   │   └── health.py             # Health check
+│   │   │   │   ├── router.py     # Main router
+│   │   │   │   ├── requests.py   # Request endpoints
+│   │   │   │   ├── checker.py    # Checker endpoints (JWT protected)
+│   │   │   │   ├── admin.py      # Admin endpoints
+│   │   │   │   └── health.py     # Health check
 │   │   │   └── middleware/
-│   │   │       ├── __init__.py
-│   │   │       ├── auth.py
-│   │   │       ├── logging.py
+│   │   │       ├── auth.py       # JWT authentication
 │   │   │       └── error_handler.py
 │   │   │
-│   │   ├── models/                       # Database Models (SQLAlchemy)
+│   │   ├── models/               # SQLAlchemy Models
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py
-│   │   │   ├── request.py                # PendingRequest model
-│   │   │   ├── audit.py                  # AuditLog model
-│   │   │   ├── customer.py               # Customer (RPS mock) model
-│   │   │   └── checker.py                # Checker model
+│   │   │   ├── request.py        # Request model
+│   │   │   ├── audit.py          # AuditLog model
+│   │   │   ├── customer.py       # Customer (RPS mock)
+│   │   │   └── enums.py          # Status, Risk, Decision enums
 │   │   │
-│   │   ├── schemas/                      # Pydantic Schemas
-│   │   │   ├── __init__.py
+│   │   ├── schemas/              # Pydantic Schemas
 │   │   │   ├── request.py
-│   │   │   ├── document.py
 │   │   │   ├── checker.py
-│   │   │   ├── confidence.py
-│   │   │   └── common.py
+│   │   │   └── auth.py
 │   │   │
-│   │   ├── services/                     # Business Logic Layer
-│   │   │   ├── __init__.py
+│   │   ├── services/             # Business Logic
 │   │   │   ├── request_service.py
-│   │   │   ├── validation_service.py
 │   │   │   ├── checker_service.py
-│   │   │   ├── rps_service.py            # Core banking mock
-│   │   │   ├── filenet_service.py        # Document storage mock
-│   │   │   └── notification_service.py
+│   │   │   └── auth_service.py   # JWT token handling
 │   │   │
-│   │   ├── agents/                       # LangGraph Agents
-│   │   │   ├── __init__.py
-│   │   │   ├── graph.py                  # Main LangGraph definition
-│   │   │   ├── state.py                  # Graph state definition
-│   │   │   ├── nodes/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── validation.py         # Validation Agent
-│   │   │   │   ├── ocr.py                # OCR Node
-│   │   │   │   ├── classifier.py         # Document Classifier Agent
-│   │   │   │   ├── extractor.py          # Field Extractor Agent
-│   │   │   │   ├── forgery.py            # Forgery Detector Agent
-│   │   │   │   ├── scorer.py             # Confidence Scorer Agent
-│   │   │   │   └── summary.py            # Summary Agent
-│   │   │   ├── prompts/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── classifier_prompt.py
-│   │   │   │   ├── extractor_prompt.py
-│   │   │   │   └── summary_prompt.py
+│   │   ├── agents/               # LangGraph Pipeline
+│   │   │   ├── graph.py          # Main pipeline definition
+│   │   │   ├── state.py          # ProcessingState schema
+│   │   │   ├── nodes/            # Pipeline nodes
+│   │   │   │   ├── validation.py
+│   │   │   │   ├── metadata.py   # Metadata extraction
+│   │   │   │   ├── ocr.py
+│   │   │   │   ├── classifier.py
+│   │   │   │   ├── extractor.py
+│   │   │   │   ├── forgery.py
+│   │   │   │   ├── scorer.py
+│   │   │   │   └── summary.py
+│   │   │   ├── specialized/      # Supervisor-worker agents
+│   │   │   │   ├── supervisor.py # Orchestrator with step tracking
+│   │   │   │   ├── forgery_tools.py
+│   │   │   │   ├── ocr_tools.py
+│   │   │   │   └── workers/
+│   │   │   ├── prompts/          # Centralized prompts
+│   │   │   │   ├── agent_prompts.py
+│   │   │   │   └── node_prompts.py
 │   │   │   └── tools/
-│   │   │       ├── __init__.py
 │   │   │       ├── ocr_tool.py
 │   │   │       ├── name_matcher.py
 │   │   │       └── forgery_tools.py
 │   │   │
-│   │   ├── workers/                      # Celery Workers
-│   │   │   ├── __init__.py
-│   │   │   ├── celery_app.py             # Celery configuration
-│   │   │   ├── tasks.py                  # Task definitions
-│   │   │   └── callbacks.py              # Task callbacks
+│   │   ├── workers/              # Celery Tasks
+│   │   │   ├── celery_app.py
+│   │   │   └── tasks.py          # process_document task
 │   │   │
-│   │   ├── db/                           # Database Layer
-│   │   │   ├── __init__.py
-│   │   │   ├── session.py                # DB session management
-│   │   │   ├── repositories/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── base.py
-│   │   │   │   ├── request_repo.py
-│   │   │   │   ├── audit_repo.py
-│   │   │   │   └── customer_repo.py
-│   │   │   └── migrations/
-│   │   │       └── versions/
-│   │   │
-│   │   └── utils/
-│   │       ├── __init__.py
-│   │       ├── id_generator.py
-│   │       ├── hash_utils.py
-│   │       ├── date_utils.py
-│   │       └── file_utils.py
+│   │   └── db/
+│   │       └── session.py
 │   │
+│   ├── storage/                  # Document uploads
+│   │   └── documents/
 │   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── unit/
-│   │   │   ├── test_validation.py
-│   │   │   ├── test_scorer.py
-│   │   │   └── test_extractor.py
-│   │   ├── integration/
-│   │   │   ├── test_graph.py
-│   │   │   └── test_api.py
-│   │   └── fixtures/
-│   │       ├── documents/
-│   │       │   └── marriage_cert_sample.pdf
-│   │       └── mock_data.py
-│   │
-│   ├── alembic.ini
 │   ├── requirements.txt
-│   ├── Dockerfile
-│   └── pyproject.toml
+│   ├── seed_db.py                # Database seeding script
+│   └── edit_db.py                # Database edit utility for testing
 │
-├── docker-compose.yml
-├── .env.example
-├── Makefile
-└── README.md
+├── ARCHITECTURE.md
+├── LLD.md
+└── Readme.md
 ```
 
 ---
 
-## 2. Backend Classes & Modules
+## 2. Backend Components
 
-### 2.1 API Layer
+### 2.1 Models (`app/models/`)
 
-#### `app/api/v1/requests.py`
+#### Request Model (`request.py`)
+
 ```python
-"""
-Request API endpoints for staff intake operations.
-"""
-
-class RequestRouter:
+class Request(Base):
     """
-    Handles all request-related API endpoints.
+    Core entity representing a change request.
     
-    Endpoints:
-        POST   /api/v1/requests           - Create new change request
-        GET    /api/v1/requests           - List requests (with filters)
-        GET    /api/v1/requests/{id}      - Get request details
-        POST   /api/v1/requests/{id}/upload - Upload document
+    Key Fields:
+        request_id: Primary key (format: "REQ-XXXXX")
+        customer_id: Reference to customer
+        status: Current workflow state (RequestStatus enum)
+        current_processing_step: Real-time step tracking for UI
+        
+    Confidence Scores:
+        ocr_confidence: OCR quality (0.0-1.0)
+        extraction_confidence: LLM extraction quality
+        old_name_match_score: Similarity for current name
+        new_name_match_score: Similarity for new name
+        overall_confidence: Weighted aggregate
+        
+    Forgery Detection:
+        forgery_score: Authenticity score (0.0-1.0)
+        forgery_result: PASS/FLAG/FAIL enum
+        forgery_details: JSON with per-layer breakdown
+        
+    Workflow:
+        assigned_checker: Checker who claimed (null if unclaimed)
+        checker_lock_until: Lock expiry timestamp
+        checker_decision: Final decision enum
+        checker_decision_reason: Required for REJECT
     """
+    __tablename__ = "requests"
 ```
 
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| POST | `/requests` | Create new request | `CreateRequestSchema` | `RequestResponse` |
-| GET | `/requests` | List with filters | Query params | `List[RequestSummary]` |
-| GET | `/requests/{id}` | Get details | - | `RequestDetail` |
-| POST | `/requests/{id}/upload` | Upload document | `multipart/form-data` | `UploadResponse` |
+#### Audit Log Model (`audit.py`)
 
----
-
-#### `app/api/v1/checker.py`
 ```python
-"""
-Checker API endpoints for review operations.
-"""
-
-class CheckerRouter:
-    """
-    Handles all checker workbench API endpoints.
-    
-    Endpoints:
-        GET    /api/v1/checker/queue      - Get pending requests queue
-        POST   /api/v1/checker/claim/{id} - Claim a request for review
-        POST   /api/v1/checker/decide/{id} - Submit decision (approve/reject)
-        POST   /api/v1/checker/release/{id} - Release claimed request
-    """
-```
-
-| Method | Endpoint | Description | Request Body | Response |
-|--------|----------|-------------|--------------|----------|
-| GET | `/checker/queue` | Get queue | Query: `risk_tier`, `status` | `List[QueueItem]` |
-| POST | `/checker/claim/{id}` | Claim request | - | `ClaimResponse` |
-| POST | `/checker/decide/{id}` | Submit decision | `DecisionSchema` | `DecisionResponse` |
-| POST | `/checker/release/{id}` | Release lock | - | `ReleaseResponse` |
-
----
-
-### 2.2 Database Models
-
-#### `app/models/request.py`
-```python
-"""
-PendingRequest SQLAlchemy model - core entity for change requests.
-"""
-
-class PendingRequest(Base):
-    """
-    Represents a change request in the pending table.
-    
-    Attributes:
-        request_id (str): Primary key, format "REQ-XXXXX"
-        idempotency_key (str): Hash for duplicate detection
-        customer_id (str): Reference to RPS customer
-        change_type (ChangeType): Enum - LEGAL_NAME, ADDRESS, DOB, CONTACT
-        document_type (DocumentType): Enum - MARRIAGE_CERT, GAZETTE, etc.
-        
-        # Request Data
-        requested_old_value (str): Value to be changed
-        requested_new_value (str): New value requested
-        
-        # Extracted Data
-        extracted_old_value (str): Value extracted from document
-        extracted_new_value (str): New value from document
-        extraction_metadata (JSON): All extracted fields with confidence
-        
-        # Scores
-        old_name_match_score (Decimal): 0.0000 - 1.0000
-        new_name_match_score (Decimal): 0.0000 - 1.0000
-        ocr_confidence (Decimal): OCR quality score
-        extraction_confidence (Decimal): LLM extraction confidence
-        doc_authenticity_score (Decimal): Forgery detection score
-        overall_confidence (Decimal): Weighted aggregate
-        
-        # Forgery
-        forgery_score (Decimal): 0.0 (forged) to 1.0 (authentic)
-        forgery_result (ForgeryResult): Enum - PASS, FLAG, FAIL
-        forgery_details (JSON): Per-layer breakdown
-        
-        # Routing
-        risk_tier (RiskTier): Enum - LOW, MEDIUM, HIGH
-        flags (JSON): Array of flag codes
-        ai_recommendation (Recommendation): APPROVE, REJECT, MANUAL_REVIEW
-        ai_summary (str): Human-readable summary
-        
-        # Document Storage
-        document_storage_path (str): S3/local path
-        filenet_staging_id (str): FileNet staging reference
-        filenet_permanent_id (str): FileNet permanent reference
-        
-        # Workflow
-        status (RequestStatus): Current state enum
-        assigned_checker (str): Checker who claimed
-        checker_lock_until (datetime): Lock expiry
-        checker_decision (Decision): APPROVE, REJECT, MORE_INFO, ESCALATE
-        checker_decision_reason (str): Mandatory for reject/escalate
-        
-        # Timestamps
-        created_at, validated_at, processing_started_at, 
-        processing_completed_at, staged_at, claimed_at, 
-        decided_at, completed_at (datetime)
-    """
-    
-    __tablename__ = "pending_requests"
-```
-
----
-
-#### `app/models/audit.py`
-```python
-"""
-AuditLog SQLAlchemy model - immutable audit trail.
-"""
-
 class AuditLog(Base):
     """
-    Immutable audit record for every state transition.
+    Immutable audit record with tamper detection.
     
-    Attributes:
-        audit_id (UUID): Primary key
-        request_id (str): Foreign key to PendingRequest
-        event_type (EventType): STATE_CHANGE, HUMAN_ACTION, SYSTEM_EVENT, ERROR
-        previous_state (str): State before transition
-        new_state (str): State after transition
-        actor_type (ActorType): SYSTEM, HUMAN, AI_AGENT
-        actor_id (str): Identifier of actor
-        agent_name (str): AI agent name if applicable
-        agent_version (str): Version of agent
-        llm_model (str): LLM model used
-        action_details (JSON): Detailed action data
-        record_snapshot (JSON): Full request state at this moment
-        timestamp (datetime): When event occurred
-        checksum (str): SHA-256 for tamper detection
+    Fields:
+        event_type: STATE_CHANGE, HUMAN_ACTION, SYSTEM_EVENT, ERROR
+        actor_type: SYSTEM, HUMAN, AI_AGENT
+        actor_id: Identifier of who performed action
+        agent_name: AI agent name (if applicable)
+        llm_model: LLM model used
+        previous_state: State before transition
+        new_state: State after transition
+        action_details: JSON with context
+        record_snapshot: Full request state at this moment
+        checksum: SHA-256 for tamper detection
     """
-    
     __tablename__ = "audit_logs"
 ```
 
----
+#### Enums (`enums.py`)
 
-### 2.3 Pydantic Schemas
-
-#### `app/schemas/request.py`
 ```python
-"""
-Pydantic schemas for request validation and serialization.
-"""
+class RequestStatus(str, Enum):
+    PENDING = "PENDING"
+    VALIDATED = "VALIDATED"
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    AI_VERIFIED_PENDING_HUMAN = "AI_VERIFIED_PENDING_HUMAN"
+    IN_REVIEW = "IN_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
+class RiskTier(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+class ForgeryResult(str, Enum):
+    PASS = "PASS"
+    FLAG = "FLAG"
+    FAIL = "FAIL"
+
+class Recommendation(str, Enum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+class Decision(str, Enum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    MORE_INFO = "MORE_INFO"
+    ESCALATE = "ESCALATE"
+```
+
+### 2.2 Schemas (`app/schemas/`)
+
+#### Request Schemas (`request.py`)
+
+```python
 class CreateRequestSchema(BaseModel):
-    """
-    Schema for creating a new change request.
-    
-    Fields:
-        customer_id: str - Customer ID from RPS
-        change_type: ChangeType - Type of change requested
-        document_type: DocumentType - Type of supporting document
-        current_value: str - Current value (e.g., current name)
-        new_value: str - Requested new value
-    """
-    customer_id: str = Field(..., min_length=1, max_length=20)
+    """Input schema for creating a new request."""
+    account_number: str = Field(..., min_length=1, max_length=20)
     change_type: ChangeType
     document_type: DocumentType
     current_value: str = Field(..., min_length=1, max_length=255)
     new_value: str = Field(..., min_length=1, max_length=255)
-
+    
+    @field_validator("new_value")
+    def new_value_different(cls, v, info):
+        """Ensure new value is different from current value."""
+        if "current_value" in info.data and v == info.data["current_value"]:
+            raise ValueError("New value must be different from current value")
+        return v
 
 class RequestResponse(BaseModel):
-    """
-    Response after creating a request.
-    
-    Fields:
-        request_id: str - Generated request ID
-        status: RequestStatus - Current status
-        message: str - User-friendly message
-    """
+    """Response after creating a request."""
     request_id: str
     status: RequestStatus
     message: str
-
+    customer_name: Optional[str] = None
 
 class RequestDetail(BaseModel):
-    """
-    Full request details for viewing.
+    """Full request details for viewing."""
+    request_id: str
+    customer_id: str
+    change_type: ChangeType
+    document_type: DocumentType
+    status: RequestStatus
     
-    Includes all fields from PendingRequest model
-    plus computed fields for UI display.
-    """
-    # ... all fields from model
+    # Requested vs Extracted values
+    requested_old_value: str
+    requested_new_value: str
+    extracted_old_value: Optional[str] = None
+    extracted_new_value: Optional[str] = None
+    extraction_details: List[ExtractionDetail] = []
+    
+    # Confidence breakdown
+    confidence: Optional[ConfidenceBreakdown] = None
+    
+    # Forgery detection
+    forgery: Optional[ForgeryDetail] = None
+    
+    # Risk and routing
+    risk_tier: Optional[RiskTier] = None
+    flags: List[str] = []
+    ai_recommendation: Optional[Recommendation] = None
+    ai_summary: Optional[str] = None
+    
+    # Workflow
+    current_processing_step: Optional[str] = None
+    assigned_checker: Optional[str] = None
+    checker_decision: Optional[Decision] = None
     
     # Computed fields
-    time_in_current_status: timedelta
-    can_be_claimed: bool
-    is_locked: bool
-```
+    is_locked: bool = False
+    can_be_claimed: bool = False
+    time_in_current_status_minutes: Optional[int] = None
 
----
-
-#### `app/schemas/confidence.py`
-```python
-"""
-Pydantic schemas for confidence scoring.
-"""
-
-class FieldScore(BaseModel):
-    """
-    Score for a single extracted field.
-    
-    Fields:
-        field_name: str - Name of the field
-        extracted_value: str - Value extracted from document
-        expected_value: str - Value from request
-        match_score: float - 0.0 to 1.0
-        match_method: str - Algorithm used (e.g., "jaro_winkler")
-        confidence: float - Extraction confidence
-    """
+class ExtractionDetail(BaseModel):
+    """Details of a single extracted field."""
     field_name: str
-    extracted_value: str
-    expected_value: str
-    match_score: float = Field(..., ge=0.0, le=1.0)
-    match_method: str
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    value: Optional[str] = None  # Nullable for failed extractions
+    confidence: float
+    source_snippet: Optional[str] = None
+```
 
+#### Checker Schemas (`checker.py`)
 
-class ConfidenceScoreCard(BaseModel):
-    """
-    Complete confidence score card for a request.
+```python
+class ClaimRequest(BaseModel):
+    """Request to claim a request for review."""
+    checker_id: str
+
+class DecisionRequest(BaseModel):
+    """Request to submit a decision."""
+    decision: Decision
+    reason: Optional[str] = None
     
-    Fields:
-        request_id: str
-        field_scores: List[FieldScore] - Per-field breakdown
-        ocr_confidence: float - OCR quality
-        extraction_confidence: float - LLM extraction quality
-        doc_authenticity_score: float - Forgery detection
-        overall_score: float - Weighted aggregate
-        risk_tier: RiskTier - LOW/MEDIUM/HIGH
-        flags: List[str] - Flag codes
-        recommendation: Recommendation - AI recommendation
-    """
+    @field_validator("reason")
+    def reason_required_for_reject(cls, v, info):
+        """Reason is required for REJECT and ESCALATE."""
+        if info.data.get("decision") in [Decision.REJECT, Decision.ESCALATE]:
+            if not v or not v.strip():
+                raise ValueError("Reason is required for reject/escalate")
+        return v
+
+class QueueItem(BaseModel):
+    """Item in the checker queue."""
     request_id: str
-    field_scores: List[FieldScore]
-    ocr_confidence: float
-    extraction_confidence: float
-    doc_authenticity_score: float
-    overall_score: float
-    risk_tier: RiskTier
-    flags: List[str]
-    recommendation: Recommendation
+    customer_id: str
+    change_type: ChangeType
+    risk_tier: Optional[RiskTier] = None
+    ai_recommendation: Optional[Recommendation] = None
+    overall_confidence: Optional[float] = None
+    flags: List[str] = []
+    created_at: datetime
+    time_in_queue_minutes: int
 ```
 
----
+### 2.3 API Routes (`app/api/v1/`)
 
-### 2.4 Services
+#### Requests API (`requests.py`)
 
-#### `app/services/request_service.py`
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/requests` | Create new request | None |
+| GET | `/api/v1/requests` | List requests (with filters) | None |
+| GET | `/api/v1/requests/{id}` | Get request details | None |
+| POST | `/api/v1/requests/{id}/upload` | Upload document | None |
+| GET | `/api/v1/requests/{id}/document` | Get uploaded document (inline or download) | None |
+
+#### Checker API (`checker.py`) — JWT Protected
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/checker/queue` | Get pending requests | JWT |
+| POST | `/api/v1/checker/claim/{id}` | Claim request for review | JWT |
+| POST | `/api/v1/checker/release/{id}` | Release claimed request | JWT |
+| POST | `/api/v1/checker/decide/{id}` | Submit decision | JWT |
+| GET | `/api/v1/checker/reviews` | Get checker's review history | JWT |
+
+**JWT Authentication:**
 ```python
-"""
-Business logic for request operations.
-"""
-
-class RequestService:
-    """
-    Handles request creation, validation, and lifecycle.
-    
-    Methods:
-        create_request(data: CreateRequestSchema) -> RequestResponse
-            - Generates idempotency key
-            - Checks for duplicates
-            - Creates DB record
-            - Enqueues for processing
-        
-        get_request(request_id: str) -> RequestDetail
-            - Fetches request with all related data
-        
-        list_requests(filters: RequestFilters) -> List[RequestSummary]
-            - Paginated list with filtering
-        
-        upload_document(request_id: str, file: UploadFile) -> UploadResponse
-            - Validates file (format, size, virus scan)
-            - Stores in S3/local
-            - Updates request with document path
-            - Triggers processing pipeline
-    
-    Dependencies:
-        - RequestRepository
-        - ValidationService
-        - FileNetService
-        - CeleryApp (for async processing)
-    """
-    
-    def __init__(
-        self,
-        request_repo: RequestRepository,
-        validation_service: ValidationService,
-        filenet_service: FileNetService,
-        celery_app: Celery
-    ):
-        ...
+# Checker endpoints require valid JWT token
+@router.post("/claim/{request_id}")
+async def claim_request(
+    request_id: str,
+    current_user: dict = Depends(get_current_user)  # JWT validation
+):
+    checker_id = current_user["username"]
+    # ... claim logic
 ```
 
----
+### 2.4 Celery Tasks (`app/workers/tasks.py`)
 
-#### `app/services/validation_service.py`
 ```python
-"""
-Synchronous validation logic (< 500ms).
-"""
-
-class ValidationService:
+@celery_app.task(bind=True, base=ProcessDocumentTask)
+def process_document(self, request_id: str) -> Dict[str, Any]:
     """
-    Performs quick validations before accepting a request.
+    Process document through LangGraph pipeline.
     
-    Methods:
-        validate_request(data: CreateRequestSchema) -> ValidationResult
-            - Runs all checks in parallel
-            - Returns aggregated result
-        
-        validate_customer(customer_id: str) -> bool
-            - Checks customer exists in RPS
-        
-        validate_name_match(input_name: str, rps_name: str) -> float
-            - Fuzzy match score (Jaro-Winkler)
-        
-        validate_document_type(change_type: ChangeType, doc_type: DocumentType) -> bool
-            - Checks doc type is allowed for change type
-        
-        validate_file(file: UploadFile) -> FileValidationResult
-            - Format check (PDF/JPEG/PNG/TIFF)
-            - Size check (≤ 10MB)
-            - Quick virus scan (ClamAV, 200ms timeout)
-        
-        check_duplicate(customer_id: str, change_type: ChangeType) -> Optional[str]
-            - Returns existing request_id if duplicate found
-    
-    Dependencies:
-        - RPSService
-        - CustomerRepository
-    """
-```
-
----
-
-#### `app/services/checker_service.py`
-```python
-"""
-Business logic for checker operations.
-"""
-
-class CheckerService:
-    """
-    Handles checker workflow operations.
-    
-    Methods:
-        get_queue(checker_id: str, filters: QueueFilters) -> List[QueueItem]
-            - Returns requests available for review
-            - Filters by risk tier based on checker role
-        
-        claim_request(request_id: str, checker_id: str) -> ClaimResult
-            - Sets assigned_checker
-            - Sets lock expiry (15 min)
-            - Updates status to IN_REVIEW
-            - Creates audit record
-        
-        release_request(request_id: str, checker_id: str) -> bool
-            - Clears assignment and lock
-            - Returns to queue
-            - Creates audit record
-        
-        submit_decision(
-            request_id: str, 
-            checker_id: str, 
-            decision: Decision, 
-            reason: Optional[str]
-        ) -> DecisionResult
-            - Validates checker owns the lock
-            - Validates reason provided for reject/escalate
-            - Updates request status
-            - Triggers downstream actions (RPS update for approve)
-            - Creates audit record
-        
-        check_lock_expiry() -> List[str]
-            - Background job to release expired locks
-            - Returns list of released request_ids
-    
-    Dependencies:
-        - RequestRepository
-        - AuditRepository
-        - RPSService
-        - NotificationService
-    """
-```
-
----
-
-#### `app/services/rps_service.py`
-```python
-"""
-Core banking system integration (mock).
-"""
-
-class RPSService:
-    """
-    Mock RPS (core banking) service.
-    
-    Methods:
-        get_customer(customer_id: str) -> Optional[CustomerRecord]
-            - Fetches customer from mock RPS
-        
-        update_customer(
-            customer_id: str, 
-            field: str, 
-            new_value: str,
-            actor_id: str,
-            actor_type: ActorType
-        ) -> UpdateResult
-            - CRITICAL: Validates actor_type == HUMAN
-            - Updates customer record
-            - Returns success/failure
-    
-    HITL Enforcement:
-        The update_customer method MUST verify that actor_type is HUMAN.
-        Any call with actor_type != HUMAN will be rejected and logged
-        as a security event.
-    """
-    
-    def update_customer(self, ...):
-        # HITL ENFORCEMENT
-        if actor_type != ActorType.HUMAN:
-            self.audit_service.log_security_event(
-                event="RPS_UPDATE_BLOCKED",
-                reason="Non-human actor attempted RPS update",
-                actor_id=actor_id,
-                actor_type=actor_type
-            )
-            raise HITLViolationError("Only human actors can update RPS")
-        
-        # Proceed with update...
-```
-
----
-
-### 2.5 LangGraph Agents
-
-#### `app/agents/state.py`
-```python
-"""
-LangGraph state definition for the processing pipeline.
-"""
-
-class ProcessingState(TypedDict):
-    """
-    State that flows through the LangGraph pipeline.
-    
-    Fields:
-        # Input
-        request_id: str
-        customer_id: str
-        change_type: str
-        document_type: str
-        requested_old_value: str
-        requested_new_value: str
-        document_path: str
-        
-        # OCR Output
-        ocr_text: str
-        ocr_confidence: float
-        ocr_word_confidences: List[dict]
-        ocr_method: str  # "tesseract" or "google_vision"
-        
-        # Classification Output
-        detected_document_type: str
-        classification_confidence: float
-        classification_match: bool
-        
-        # Extraction Output
-        extracted_fields: dict
-        extraction_confidence: float
-        
-        # Forgery Output
-        forgery_score: float
-        forgery_result: str  # PASS, FLAG, FAIL
-        forgery_details: dict
-        
-        # Scoring Output
-        field_scores: List[dict]
-        overall_score: float
-        risk_tier: str
-        flags: List[str]
-        
-        # Summary Output
-        ai_summary: str
-        ai_recommendation: str
-        
-        # Error Handling
-        errors: List[str]
-        current_step: str
-    """
-```
-
----
-
-#### `app/agents/graph.py`
-```python
-"""
-Main LangGraph definition for document processing pipeline.
-"""
-
-from langgraph.graph import StateGraph, END
-
-class DocumentProcessingGraph:
-    """
-    LangGraph pipeline for processing change requests.
-    
-    Graph Structure:
-        START
-          │
-          ▼
-        ┌─────────────────┐
-        │  validation     │ ─── FAIL ──▶ END (status: VALIDATION_FAILED)
-        └────────┬────────┘
-                 │ PASS
-                 ▼
-        ┌─────────────────┐
-        │     ocr         │ ─── LOW_CONF ──▶ fallback_ocr
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │   classifier    │ ─── MISMATCH ──▶ flag_and_continue
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │   extractor     │
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │    forgery      │
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │    scorer       │
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │    summary      │
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │  save_results   │
-        └────────┬────────┘
-                 │
-                 ▼
-                END (status: AI_VERIFIED_PENDING_HUMAN)
-    
-    Conditional Routing:
-        - After OCR: if confidence < 0.6, route to fallback_ocr
-        - After classifier: if mismatch, add flag but continue
-        - After forgery: if FAIL, set risk_tier to HIGH
-    """
-    
-    def __init__(self, llm, ocr_service, db_session):
-        self.llm = llm
-        self.ocr_service = ocr_service
-        self.db_session = db_session
-        self.graph = self._build_graph()
-    
-    def _build_graph(self) -> StateGraph:
-        graph = StateGraph(ProcessingState)
-        
-        # Add nodes
-        graph.add_node("validation", self.validation_node)
-        graph.add_node("ocr", self.ocr_node)
-        graph.add_node("fallback_ocr", self.fallback_ocr_node)
-        graph.add_node("classifier", self.classifier_node)
-        graph.add_node("extractor", self.extractor_node)
-        graph.add_node("forgery", self.forgery_node)
-        graph.add_node("scorer", self.scorer_node)
-        graph.add_node("summary", self.summary_node)
-        graph.add_node("save_results", self.save_results_node)
-        
-        # Add edges
-        graph.add_conditional_edges(
-            "validation",
-            self._route_after_validation,
-            {"continue": "ocr", "fail": END}
-        )
-        graph.add_conditional_edges(
-            "ocr",
-            self._route_after_ocr,
-            {"continue": "classifier", "fallback": "fallback_ocr"}
-        )
-        graph.add_edge("fallback_ocr", "classifier")
-        graph.add_edge("classifier", "extractor")
-        graph.add_edge("extractor", "forgery")
-        graph.add_edge("forgery", "scorer")
-        graph.add_edge("scorer", "summary")
-        graph.add_edge("summary", "save_results")
-        graph.add_edge("save_results", END)
-        
-        graph.set_entry_point("validation")
-        
-        return graph.compile()
-    
-    def _route_after_ocr(self, state: ProcessingState) -> str:
-        if state["ocr_confidence"] < 0.6:
-            return "fallback"
-        return "continue"
-```
-
----
-
-#### `app/agents/nodes/validation.py`
-```python
-"""
-Validation Agent - validates request before processing.
-"""
-
-class ValidationNode:
-    """
-    Validates the request can proceed to document processing.
-    
-    Checks:
-        1. Request exists and is in correct status
-        2. Document file exists and is accessible
-        3. Customer still exists in RPS
-    
-    Input State:
-        - request_id
-        - document_path
-        - customer_id
-    
-    Output State Updates:
-        - validation_passed: bool
-        - validation_errors: List[str]
-    
-    Routing:
-        - If all checks pass: continue to OCR
-        - If any check fails: END with VALIDATION_FAILED status
-    """
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        errors = []
-        
-        # Check document exists
-        if not self._file_exists(state["document_path"]):
-            errors.append("Document file not found")
-        
-        # Check customer exists
-        customer = await self.rps_service.get_customer(state["customer_id"])
-        if not customer:
-            errors.append("Customer not found in RPS")
-        
-        return {
-            **state,
-            "validation_passed": len(errors) == 0,
-            "validation_errors": errors,
-            "current_step": "validation"
-        }
-```
-
----
-
-#### `app/agents/nodes/ocr.py`
-```python
-"""
-OCR Node - extracts text from document.
-"""
-
-class OCRNode:
-    """
-    Performs OCR on the uploaded document.
-    
-    Process:
-        1. Load document (PDF or image)
-        2. Pre-process images (deskew, binarize, denoise)
-        3. Run Tesseract OCR
-        4. Calculate confidence scores
-    
-    Input State:
-        - document_path
-    
-    Output State Updates:
-        - ocr_text: str - Extracted text
-        - ocr_confidence: float - Average confidence
-        - ocr_word_confidences: List[dict] - Per-word scores
-        - ocr_method: str - "tesseract"
-    
-    Routing:
-        - If confidence >= 0.6: continue to classifier
-        - If confidence < 0.6: route to fallback_ocr
-    """
-    
-    def __init__(self, tesseract_config: dict):
-        self.tesseract_config = tesseract_config
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        # Load and pre-process document
-        images = self._load_document(state["document_path"])
-        processed_images = [self._preprocess(img) for img in images]
-        
-        # Run OCR
-        results = []
-        for img in processed_images:
-            result = pytesseract.image_to_data(
-                img, 
-                output_type=pytesseract.Output.DICT,
-                config=self.tesseract_config
-            )
-            results.append(result)
-        
-        # Aggregate results
-        text, confidence, word_confs = self._aggregate_results(results)
-        
-        return {
-            **state,
-            "ocr_text": text,
-            "ocr_confidence": confidence,
-            "ocr_word_confidences": word_confs,
-            "ocr_method": "tesseract",
-            "current_step": "ocr"
-        }
-    
-    def _preprocess(self, image):
-        """Apply image pre-processing pipeline."""
-        image = self._deskew(image)
-        image = self._binarize(image)
-        image = self._denoise(image)
-        image = self._sharpen(image)
-        return image
-```
-
----
-
-#### `app/agents/nodes/classifier.py`
-```python
-"""
-Document Classifier Agent - verifies document type.
-"""
-
-class ClassifierNode:
-    """
-    Classifies the document type using LLM.
-    
-    Process:
-        1. Send OCR text to LLM with classification prompt
-        2. Parse structured response
-        3. Compare detected type with declared type
-    
-    Input State:
-        - ocr_text
-        - document_type (declared)
-    
-    Output State Updates:
-        - detected_document_type: str
-        - classification_confidence: float
-        - classification_match: bool
-        - flags: adds DOC_TYPE_MISMATCH if applicable
-    """
-    
-    def __init__(self, llm, prompt_template: str):
-        self.llm = llm
-        self.prompt_template = prompt_template
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        prompt = self.prompt_template.format(
-            ocr_text=state["ocr_text"][:4000]  # Truncate for token limit
-        )
-        
-        response = await self.llm.ainvoke(prompt)
-        result = self._parse_response(response)
-        
-        # Check for match
-        declared = state["document_type"]
-        detected = result["detected_type"]
-        is_match = declared.upper() == detected.upper()
-        
-        # Add flag if mismatch
-        flags = state.get("flags", [])
-        if not is_match:
-            flags.append("DOC_TYPE_MISMATCH")
-        
-        return {
-            **state,
-            "detected_document_type": detected,
-            "classification_confidence": result["confidence"],
-            "classification_match": is_match,
-            "flags": flags,
-            "current_step": "classifier"
-        }
-```
-
----
-
-#### `app/agents/nodes/extractor.py`
-```python
-"""
-Field Extractor Agent - extracts structured fields.
-"""
-
-class ExtractorNode:
-    """
-    Extracts structured fields from document using LLM.
-    
-    Process:
-        1. Select extraction prompt based on document type
-        2. Send OCR text to LLM
-        3. Parse structured response with field values and confidence
-    
-    Input State:
-        - ocr_text
-        - detected_document_type
-    
-    Output State Updates:
-        - extracted_fields: dict with structure:
-            {
-                "bride_name": {"value": "...", "confidence": 0.97},
-                "married_name": {"value": "...", "confidence": 0.94},
-                ...
-            }
-        - extraction_confidence: float (average)
-    
-    Field Mapping (Marriage Certificate):
-        - bride_name -> old_value
-        - married_name -> new_value
-    """
-    
-    FIELD_SCHEMAS = {
-        "MARRIAGE_CERTIFICATE": {
-            "required": ["bride_name", "married_name"],
-            "optional": ["marriage_date", "groom_name", "issuing_authority", "certificate_number"]
-        },
-        "GAZETTE_NOTIFICATION": {
-            "required": ["old_name", "new_name"],
-            "optional": ["publication_date", "gazette_number"]
-        }
-    }
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        doc_type = state["detected_document_type"]
-        schema = self.FIELD_SCHEMAS.get(doc_type, {})
-        
-        prompt = self._build_extraction_prompt(
-            state["ocr_text"],
-            schema
-        )
-        
-        response = await self.llm.ainvoke(prompt)
-        fields = self._parse_fields(response)
-        
-        # Calculate average confidence
-        confidences = [f["confidence"] for f in fields.values()]
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-        return {
-            **state,
-            "extracted_fields": fields,
-            "extraction_confidence": avg_confidence,
-            "current_step": "extractor"
-        }
-```
-
----
-
-#### `app/agents/nodes/forgery.py`
-```python
-"""
-Forgery Detector Agent - detects document tampering.
-"""
-
-class ForgeryNode:
-    """
-    Detects potential document forgery using multiple layers.
-    
-    Detection Layers:
-        1. Metadata Analysis (20%) - PDF creation/mod dates, software
-        2. ELA Analysis (30%) - Error Level Analysis for edits
-        3. Font Consistency (20%) - Font mismatches in text
-        4. ML Model (30%) - Pre-trained forgery detection
-    
-    Input State:
-        - document_path
-    
-    Output State Updates:
-        - forgery_score: float (0.0 = forged, 1.0 = authentic)
-        - forgery_result: str (PASS/FLAG/FAIL)
-        - forgery_details: dict with per-layer scores
-        - flags: adds FORGERY_FLAG if result is FLAG/FAIL
-        - risk_tier: set to HIGH if result is FAIL
-    
-    Thresholds:
-        - > 0.85: PASS
-        - 0.60-0.85: FLAG
-        - < 0.60: FAIL
-    """
-    
-    LAYER_WEIGHTS = {
-        "metadata": 0.20,
-        "ela": 0.30,
-        "font": 0.20,
-        "ml": 0.30
-    }
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        document_path = state["document_path"]
-        
-        # Run all detection layers
-        metadata_score = await self._analyze_metadata(document_path)
-        ela_score = await self._analyze_ela(document_path)
-        font_score = await self._analyze_fonts(document_path)
-        ml_score = await self._run_ml_model(document_path)
-        
-        # Calculate weighted score
-        forgery_score = (
-            metadata_score * self.LAYER_WEIGHTS["metadata"] +
-            ela_score * self.LAYER_WEIGHTS["ela"] +
-            font_score * self.LAYER_WEIGHTS["font"] +
-            ml_score * self.LAYER_WEIGHTS["ml"]
-        )
-        
-        # Determine result
-        if forgery_score > 0.85:
-            result = "PASS"
-        elif forgery_score >= 0.60:
-            result = "FLAG"
-        else:
-            result = "FAIL"
-        
-        # Update flags and risk tier
-        flags = state.get("flags", [])
-        risk_tier = state.get("risk_tier", "LOW")
-        
-        if result in ["FLAG", "FAIL"]:
-            flags.append("FORGERY_FLAG")
-        if result == "FAIL":
-            risk_tier = "HIGH"
-        
-        return {
-            **state,
-            "forgery_score": forgery_score,
-            "forgery_result": result,
-            "forgery_details": {
-                "metadata": metadata_score,
-                "ela": ela_score,
-                "font": font_score,
-                "ml": ml_score
-            },
-            "flags": flags,
-            "risk_tier": risk_tier,
-            "current_step": "forgery"
-        }
-    
-    async def _analyze_ela(self, document_path: str) -> float:
-        """
-        Error Level Analysis - detects edited regions.
-        
-        Process:
-            1. Re-save image at known compression level
-            2. Compute pixel difference
-            3. High difference in text regions = suspicious
-        """
-        ...
-```
-
----
-
-#### `app/agents/nodes/scorer.py`
-```python
-"""
-Confidence Scorer Agent - calculates overall confidence.
-"""
-
-class ScorerNode:
-    """
-    Calculates confidence scores and determines risk tier.
-    
-    Score Components:
-        - Name Match (40%): Jaro-Winkler similarity
-        - Document Authenticity (30%): Forgery score
-        - OCR Confidence (15%): OCR quality
-        - Extraction Confidence (15%): LLM extraction quality
-    
-    Input State:
-        - extracted_fields
-        - requested_old_value
-        - requested_new_value
-        - forgery_score
-        - ocr_confidence
-        - extraction_confidence
-    
-    Output State Updates:
-        - field_scores: List[dict] - Per-field breakdown
-        - overall_score: float
-        - risk_tier: str (LOW/MEDIUM/HIGH)
-        - flags: may add NAME_MISMATCH flag
-    
-    Risk Tier Thresholds:
-        - LOW: score >= 0.90, no major flags
-        - MEDIUM: score 0.70-0.90, or minor flags
-        - HIGH: score < 0.70, or major flags
-    """
-    
-    WEIGHTS = {
-        "name_match": 0.40,
-        "doc_authenticity": 0.30,
-        "ocr_confidence": 0.15,
-        "extraction_confidence": 0.15
-    }
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        # Calculate name match scores
-        old_name_score = self._calculate_name_match(
-            state["extracted_fields"].get("bride_name", {}).get("value", ""),
-            state["requested_old_value"]
-        )
-        new_name_score = self._calculate_name_match(
-            state["extracted_fields"].get("married_name", {}).get("value", ""),
-            state["requested_new_value"]
-        )
-        avg_name_score = (old_name_score + new_name_score) / 2
-        
-        # Calculate overall score
-        overall_score = (
-            avg_name_score * self.WEIGHTS["name_match"] +
-            state["forgery_score"] * self.WEIGHTS["doc_authenticity"] +
-            state["ocr_confidence"] * self.WEIGHTS["ocr_confidence"] +
-            state["extraction_confidence"] * self.WEIGHTS["extraction_confidence"]
-        )
-        
-        # Determine risk tier
-        flags = state.get("flags", [])
-        major_flags = ["FORGERY_FLAG", "DOC_TYPE_MISMATCH"]
-        has_major_flag = any(f in flags for f in major_flags)
-        
-        if overall_score >= 0.90 and not has_major_flag:
-            risk_tier = "LOW"
-        elif overall_score >= 0.70 and not has_major_flag:
-            risk_tier = "MEDIUM"
-        else:
-            risk_tier = "HIGH"
-        
-        # Add name mismatch flag if needed
-        if avg_name_score < 0.85:
-            flags.append("NAME_MISMATCH")
-        
-        return {
-            **state,
-            "field_scores": [
-                {"field": "old_name", "score": old_name_score},
-                {"field": "new_name", "score": new_name_score}
-            ],
-            "old_name_match_score": old_name_score,
-            "new_name_match_score": new_name_score,
-            "overall_score": overall_score,
-            "risk_tier": risk_tier,
-            "flags": flags,
-            "current_step": "scorer"
-        }
-    
-    def _calculate_name_match(self, extracted: str, expected: str) -> float:
-        """Calculate Jaro-Winkler similarity between names."""
-        from jellyfish import jaro_winkler_similarity
-        return jaro_winkler_similarity(
-            extracted.lower().strip(),
-            expected.lower().strip()
-        )
-```
-
----
-
-#### `app/agents/nodes/summary.py`
-```python
-"""
-Summary Agent - generates human-readable summary.
-"""
-
-class SummaryNode:
-    """
-    Generates AI summary and recommendation for checker.
-    
-    Recommendation Logic:
-        - APPROVE: score >= 0.85, name match >= 0.95, no HIGH flags, forgery PASS
-        - REJECT: score < 0.60, name match < 0.70, or forgery FAIL
-        - MANUAL_REVIEW: everything else
-    
-    Input State:
-        - All previous outputs (scores, flags, extracted fields)
-    
-    Output State Updates:
-        - ai_summary: str - Human-readable summary
-        - ai_recommendation: str - APPROVE/REJECT/MANUAL_REVIEW
-    
-    Summary Format:
-        "{Document Type} verified. Old name '{extracted}' matches {field} 
-        ({score}%). New name '{extracted}' matches {field} ({score}%). 
-        Document authenticity check {result} ({score}%). 
-        {Flag messages if any}. Recommendation: {recommendation}"
-    """
-    
-    async def __call__(self, state: ProcessingState) -> ProcessingState:
-        # Determine recommendation
-        recommendation = self._determine_recommendation(state)
-        
-        # Generate summary using LLM
-        summary = await self._generate_summary(state, recommendation)
-        
-        return {
-            **state,
-            "ai_summary": summary,
-            "ai_recommendation": recommendation,
-            "current_step": "summary"
-        }
-    
-    def _determine_recommendation(self, state: ProcessingState) -> str:
-        score = state["overall_score"]
-        name_score = min(
-            state["old_name_match_score"],
-            state["new_name_match_score"]
-        )
-        forgery = state["forgery_result"]
-        flags = state.get("flags", [])
-        
-        # REJECT conditions
-        if score < 0.60:
-            return "REJECT"
-        if name_score < 0.70:
-            return "REJECT"
-        if forgery == "FAIL":
-            return "REJECT"
-        if "DOC_TYPE_MISMATCH" in flags:
-            return "REJECT"
-        
-        # APPROVE conditions
-        if (score >= 0.85 and 
-            name_score >= 0.95 and 
-            forgery == "PASS" and
-            not any(f in flags for f in ["FORGERY_FLAG", "DOC_TYPE_MISMATCH"])):
-            return "APPROVE"
-        
-        # Default to manual review
-        return "MANUAL_REVIEW"
-```
-
----
-
-### 2.6 Celery Workers
-
-#### `app/workers/celery_app.py`
-```python
-"""
-Celery application configuration.
-"""
-
-from celery import Celery
-
-celery_app = Celery(
-    "iasw",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/1"
-)
-
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_time_limit=300,  # 5 minutes max
-    task_soft_time_limit=270,  # Soft limit at 4.5 minutes
-    worker_prefetch_multiplier=1,  # One task at a time
-    task_acks_late=True,  # Ack after completion
-    task_reject_on_worker_lost=True,
-)
-```
-
----
-
-#### `app/workers/tasks.py`
-```python
-"""
-Celery task definitions.
-"""
-
-from celery import Task
-
-class ProcessDocumentTask(Task):
-    """
-    Async task to process a document through the LangGraph pipeline.
-    
-    Task Flow:
-        1. Update request status to PROCESSING
-        2. Initialize LangGraph with request state
-        3. Execute graph
+    Flow:
+        1. Load request from database
+        2. Update status to PROCESSING
+        3. Run LangGraph pipeline with step callback
         4. Save results to database
         5. Update status to AI_VERIFIED_PENDING_HUMAN
     
-    Error Handling:
-        - On failure: increment retry count
-        - Max 3 retries with exponential backoff
-        - On max retries: move to DLQ, alert ops
+    Step Tracking:
+        The on_step_change callback persists each step to the database,
+        allowing the UI to show real-time progress.
     
-    Idempotency:
-        - Checks if already processed before starting
-        - Uses request_id as idempotency key
+    Async/Sync Handling:
+        Uses run_async() wrapper to properly handle event loops
+        in Celery's synchronous context.
     """
     
-    name = "process_document"
-    max_retries = 3
-    default_retry_delay = 60  # 1 minute
+    # Run pipeline with step tracking callback
+    final_state = run_async(
+        pipeline.process(
+            request_id=request.request_id,
+            customer_id=request.customer_id,
+            change_type=request.change_type.value,
+            document_type=request.document_type.value,
+            requested_old_value=request.requested_old_value,
+            requested_new_value=request.requested_new_value,
+            document_path=document_path,
+            on_step_change=update_processing_step,  # Real-time step updates
+        )
+    )
+```
+
+**Event Loop Handling:**
+
+```python
+def run_async(coro):
+    """
+    Safely run async coroutine from synchronous Celery task.
     
-    def run(self, request_id: str):
-        # Check idempotency
-        request = self.get_request(request_id)
-        if request.status not in ["VALIDATED", "QUEUED"]:
-            return {"status": "skipped", "reason": "already_processed"}
-        
-        # Update status
-        self.update_status(request_id, "PROCESSING")
-        
+    Handles event loop management to avoid conflicts with
+    existing loops that might be running in Celery workers.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If already in async context, use thread
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            # Build initial state
-            state = self.build_initial_state(request)
-            
-            # Execute LangGraph
-            graph = self.get_graph()
-            result = graph.invoke(state)
-            
-            # Save results
-            self.save_results(request_id, result)
-            
-            # Update status
-            self.update_status(request_id, "AI_VERIFIED_PENDING_HUMAN")
-            
-            return {"status": "success", "request_id": request_id}
-            
-        except Exception as e:
-            self.handle_failure(request_id, e)
-            raise self.retry(exc=e)
-
-
-@celery_app.task(bind=True, base=ProcessDocumentTask)
-def process_document(self, request_id: str):
-    return self.run(request_id)
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 ```
 
 ---
 
 ## 3. Frontend Components
 
-### 3.1 Staff Portal
+### 3.1 Page Structure
 
-#### `frontend/src/components/staff/RequestForm.tsx`
+| Page | Path | Purpose |
+|------|------|---------|
+| Home | `/` | Portal selection (Staff/Checker/Admin) |
+| Login | `/login` | Sign in / Sign up tabs |
+| Staff Dashboard | `/staff` | Stats + recent requests |
+| Staff Requests | `/staff/requests` | Request list with filters |
+| New Request | `/staff/requests/new` | Create request form |
+| Request Detail | `/staff/requests/[id]` | View request + processing status |
+| Checker Dashboard | `/checker` | Queue stats + quick actions |
+| Checker Queue | `/checker/queue` | Pending requests to review |
+| Review Screen | `/checker/review/[requestId]` | Document + AI analysis + decision |
+| Admin | `/admin` | Database viewer |
+
+### 3.2 Key Components
+
+#### Processing Status Display
+
+Shows real-time processing step with spinner animation:
+
 ```typescript
-/**
- * RequestForm - Staff intake form for new change requests.
- * 
- * Props:
- *   onSubmit: (data: CreateRequestData) => Promise<void>
- *   isLoading: boolean
- * 
- * Fields:
- *   - customerId: text input with validation
- *   - changeType: dropdown (LEGAL_NAME, ADDRESS, DOB, CONTACT)
- *   - documentType: dropdown (filtered by changeType)
- *   - currentValue: text input
- *   - newValue: text input
- * 
- * Validation:
- *   - All fields required
- *   - customerId format: alphanumeric, max 20 chars
- *   - currentValue != newValue
- * 
- * State:
- *   - formData: CreateRequestData
- *   - errors: Record<string, string>
- *   - isValidating: boolean
- */
+// Request detail page shows processing steps
+const PROCESSING_STEPS = [
+  { key: 'validating', label: 'Validating Document' },
+  { key: 'metadata', label: 'Extracting Metadata' },
+  { key: 'ocr', label: 'Running OCR' },
+  { key: 'classifying', label: 'Classifying Document' },
+  { key: 'extracting', label: 'Extracting Fields' },
+  { key: 'forgery', label: 'Detecting Forgery' },
+  { key: 'scoring', label: 'Calculating Scores' },
+  { key: 'summary', label: 'Generating Summary' },
+  { key: 'complete', label: 'AI Verification Complete' },
+];
+```
+
+#### Document Preview Component (Checker Workbench)
+
+Interactive document viewer with zoom controls:
+
+```typescript
+// Document preview with zoom controls (25%-200%)
+<DocumentViewer 
+  documentUrl={reviewData.document_url}
+  zoom={documentZoom}
+  onZoomChange={setDocumentZoom}
+/>
+
+// Features:
+// - Zoom in/out buttons (25% increments)
+// - Reset to 100% button
+// - Scrollable container (max-height: 600px)
+// - Quick reference panel showing old/new names to verify
+// - Inline display (not download)
+```
+
+#### Confidence Score Card
+
+Visual display of confidence scores with progress bars:
+
+```typescript
+interface ConfidenceBreakdown {
+  old_name_match: number;  // 0.0 - 1.0
+  new_name_match: number;
+  ocr_confidence: number;
+  extraction_confidence: number;
+  doc_authenticity: number;
+  overall: number;
+}
+```
+
+Color coding:
+- Green: ≥ 90%
+- Yellow: 70-89%
+- Red: < 70%
+
+#### Decision Buttons (Checker)
+
+```typescript
+// Actions available to checker
+type CheckerAction = 'APPROVE' | 'REJECT' | 'MORE_INFO' | 'ESCALATE';
+
+// APPROVE: immediate action
+// REJECT/MORE_INFO/ESCALATE: opens modal for required reason
 ```
 
 ---
 
-#### `frontend/src/components/staff/DocumentUploader.tsx`
-```typescript
-/**
- * DocumentUploader - File upload component with validation.
- * 
- * Props:
- *   requestId: string
- *   onUploadComplete: (response: UploadResponse) => void
- *   onError: (error: string) => void
- * 
- * Features:
- *   - Drag and drop support
- *   - File type validation (PDF, JPEG, PNG, TIFF)
- *   - File size validation (max 10MB)
- *   - Upload progress indicator
- *   - Preview for images
- * 
- * State:
- *   - file: File | null
- *   - uploadProgress: number (0-100)
- *   - isUploading: boolean
- *   - error: string | null
- */
-```
+## 4. LangGraph Pipeline
 
----
+### 4.1 Pipeline Architecture
 
-### 3.2 Checker Workbench
+Two modes available (configured via `USE_SUPERVISOR_AGENTS` setting):
 
-#### `frontend/src/components/checker/QueueTable.tsx`
-```typescript
-/**
- * QueueTable - Displays pending requests for checker review.
- * 
- * Props:
- *   items: QueueItem[]
- *   onClaim: (requestId: string) => Promise<void>
- *   isLoading: boolean
- *   filters: QueueFilters
- *   onFilterChange: (filters: QueueFilters) => void
- * 
- * Columns:
- *   - Request ID (sortable)
- *   - Customer ID
- *   - Change Type
- *   - Risk Tier (color-coded badge)
- *   - AI Recommendation
- *   - Time in Queue
- *   - Actions (Claim button)
- * 
- * Features:
- *   - Filter by risk tier
- *   - Sort by columns
- *   - Pagination
- *   - Auto-refresh every 30s
- */
-```
+1. **Linear Pipeline** (`graph.py`): Sequential nodes with conditional routing
+2. **Supervisor-Agent** (`specialized/supervisor.py`): Supervisor orchestrates worker agents
 
----
+### 4.2 Processing State Schema
 
-#### `frontend/src/components/checker/ReviewPanel.tsx`
-```typescript
-/**
- * ReviewPanel - Main review screen for a claimed request.
- * 
- * Props:
- *   request: RequestDetail
- *   onDecision: (decision: Decision, reason?: string) => Promise<void>
- *   onRelease: () => Promise<void>
- * 
- * Layout:
- *   ┌─────────────────────────────────────────────────┐
- *   │  Request Header (ID, Customer, Status)          │
- *   ├──────────────────────┬──────────────────────────┤
- *   │  Document Viewer     │  Right Panel:            │
- *   │  (PDF/Image preview) │  - AI Summary            │
- *   │                      │  - Confidence Scores     │
- *   │                      │  - Extracted Fields      │
- *   │                      │  - Flags & Alerts        │
- *   ├──────────────────────┴──────────────────────────┤
- *   │  Decision Buttons (Approve/Reject/More Info)    │
- *   └─────────────────────────────────────────────────┘
- * 
- * State:
- *   - activeTab: "summary" | "scores" | "fields" | "flags"
- *   - decisionReason: string (for reject/escalate)
- *   - isSubmitting: boolean
- */
-```
-
----
-
-#### `frontend/src/components/checker/ConfidenceScoreCard.tsx`
-```typescript
-/**
- * ConfidenceScoreCard - Visual display of confidence scores.
- * 
- * Props:
- *   scoreCard: ConfidenceScoreCard
- * 
- * Display:
- *   - Overall Score (large, color-coded)
- *   - Risk Tier Badge
- *   - Per-field scores with progress bars:
- *     - Old Name Match: ████████░░ 85%
- *     - New Name Match: █████████░ 92%
- *     - OCR Confidence: ████████░░ 88%
- *     - Doc Authenticity: ███████░░░ 75%
- *   - Score breakdown tooltip
- * 
- * Color Coding:
- *   - Green: >= 90%
- *   - Yellow: 70-89%
- *   - Red: < 70%
- */
-```
-
----
-
-#### `frontend/src/components/checker/DecisionButtons.tsx`
-```typescript
-/**
- * DecisionButtons - Action buttons for checker decision.
- * 
- * Props:
- *   onApprove: () => void
- *   onReject: (reason: string) => void
- *   onMoreInfo: (reason: string) => void
- *   onEscalate: (reason: string) => void
- *   isDisabled: boolean
- *   aiRecommendation: string
- * 
- * Buttons:
- *   - ✅ Approve (green, highlighted if AI recommends)
- *   - ❌ Reject (red, opens reason modal)
- *   - ❓ More Info (orange, opens reason modal)
- *   - ⬆️ Escalate (gray, opens reason modal)
- * 
- * Behavior:
- *   - Approve: immediate action
- *   - Others: open modal for mandatory reason
- *   - Confirm dialog before action
- */
-```
-
----
-
-## 4. Database Migrations
-
-#### `backend/app/db/migrations/versions/001_initial.py`
 ```python
-"""
-Initial database schema migration.
-
-Creates:
-    - pending_requests table
-    - audit_logs table
-    - customers table (mock RPS)
-    - checkers table
-    - All indexes
-"""
-
-def upgrade():
-    # Create enum types
-    op.execute("""
-        CREATE TYPE change_type AS ENUM ('LEGAL_NAME', 'ADDRESS', 'DOB', 'CONTACT');
-        CREATE TYPE document_type AS ENUM ('MARRIAGE_CERTIFICATE', 'GAZETTE_NOTIFICATION', 
-            'DEED_POLL', 'COURT_ORDER', 'UTILITY_BILL', 'LEASE_AGREEMENT', 
-            'BIRTH_CERTIFICATE', 'PASSPORT', 'PAN_CARD', 'CONSENT_FORM');
-        CREATE TYPE request_status AS ENUM ('INTAKE_RECEIVED', 'VALIDATED', 'QUEUED', 
-            'PROCESSING', 'AI_VERIFIED_PENDING_HUMAN', 'IN_REVIEW', 'PENDING_INFO', 
-            'ESCALATED', 'REPROCESSING', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED');
-        CREATE TYPE risk_tier AS ENUM ('LOW', 'MEDIUM', 'HIGH');
-        CREATE TYPE forgery_result AS ENUM ('PASS', 'FLAG', 'FAIL');
-        CREATE TYPE recommendation AS ENUM ('APPROVE', 'REJECT', 'MANUAL_REVIEW');
-        CREATE TYPE decision AS ENUM ('APPROVE', 'REJECT', 'MORE_INFO', 'ESCALATE');
-        CREATE TYPE actor_type AS ENUM ('SYSTEM', 'HUMAN', 'AI_AGENT');
-        CREATE TYPE event_type AS ENUM ('STATE_CHANGE', 'HUMAN_ACTION', 'SYSTEM_EVENT', 'ERROR');
-    """)
+class ProcessingState(TypedDict):
+    """State that flows through the LangGraph pipeline."""
     
-    # Create pending_requests table
-    op.create_table(
-        'pending_requests',
-        sa.Column('request_id', sa.String(36), primary_key=True),
-        sa.Column('idempotency_key', sa.String(64), unique=True),
-        sa.Column('customer_id', sa.String(20), nullable=False),
-        # ... all other columns from schema
-    )
+    # Input
+    request_id: str
+    customer_id: str
+    change_type: str
+    document_type: str
+    requested_old_value: str
+    requested_new_value: str
+    document_path: str
     
-    # Create indexes
-    op.create_index('idx_pending_status', 'pending_requests', ['status'])
-    op.create_index('idx_pending_customer', 'pending_requests', ['customer_id'])
-    op.create_index('idx_pending_risk_tier', 'pending_requests', ['risk_tier', 'status'])
-    # ... other indexes
+    # Metadata Output (NEW)
+    metadata: Dict[str, Any]
+    metadata_anomalies: List[str]
+    
+    # OCR Output
+    ocr_text: str
+    ocr_confidence: float
+    ocr_method: str  # "tesseract" or "google_vision"
+    
+    # Classification Output
+    detected_document_type: str
+    classification_confidence: float
+    classification_match: bool
+    
+    # Extraction Output
+    extracted_fields: Dict[str, Any]
+    extracted_old_value: str
+    extracted_new_value: str
+    extraction_confidence: float
+    
+    # Forgery Output
+    forgery_score: float
+    forgery_result: str  # PASS, FLAG, FAIL
+    forgery_details: Dict[str, float]
+    
+    # Scoring Output
+    old_name_match_score: float
+    new_name_match_score: float
+    overall_score: float
+    risk_tier: str
+    flags: List[str]
+    
+    # Summary Output
+    ai_summary: str
+    ai_recommendation: str
+    
+    # Step Tracking
+    current_step: str
+    errors: List[str]
 ```
 
----
+### 4.3 Node Implementations
 
-## 5. Configuration
+#### Metadata Node (`nodes/metadata.py`)
 
-#### `backend/app/config.py`
 ```python
-"""
-Application configuration using pydantic-settings.
-"""
-
-from pydantic_settings import BaseSettings
-
-class Settings(BaseSettings):
+async def metadata_node(state: ProcessingState) -> Dict[str, Any]:
     """
-    Application settings loaded from environment variables.
+    Extract document metadata before OCR.
     
-    Categories:
-        - App: General application settings
-        - Database: PostgreSQL connection
-        - Redis: Cache and queue
-        - LLM: Claude API configuration
-        - OCR: Tesseract/Google Vision
-        - Storage: S3/local file storage
-        - Security: Auth and CORS
+    Checks:
+        - PDF creation/modification dates
+        - Producer software (Photoshop = suspicious)
+        - Resolution consistency
+        - EXIF data for images
+    
+    Fast (~10ms), runs before OCR.
     """
+    document_path = state.get('document_path')
+    metadata = extract_metadata(document_path)  # PyMuPDF / Pillow
+    anomalies = detect_anomalies(metadata)
     
-    # App
-    APP_NAME: str = "IASW"
-    DEBUG: bool = False
-    API_V1_PREFIX: str = "/api/v1"
+    return {
+        "metadata": metadata,
+        "metadata_anomalies": anomalies,
+        "current_step": "metadata"
+    }
+```
+
+#### Supervisor Pipeline with Step Tracking (`specialized/supervisor.py`)
+
+```python
+async def process(
+    self,
+    request_id: str,
+    customer_id: str,
+    change_type: str,
+    document_type: str,
+    requested_old_value: str,
+    requested_new_value: str,
+    document_path: str,
+    on_step_change: Optional[Callable[[str, str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Process a document through the supervisor pipeline.
     
-    # Database
-    DATABASE_URL: str = "postgresql://user:pass@localhost:5432/iasw"
-    DB_POOL_SIZE: int = 10
+    Args:
+        on_step_change: Optional callback for real-time step updates
+                       (ignored in supervisor mode - supervisor handles
+                       steps internally)
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    Returns:
+        Final processing state
+    """
+```
+
+#### Conditional Routing
+
+```python
+def route_after_ocr(state: ProcessingState) -> str:
+    """Route based on OCR confidence."""
+    if state.get("ocr_confidence", 0) < 0.6:
+        return "fallback"  # Use Google Vision
+    return "continue"
+
+def route_after_classifier(state: ProcessingState) -> str:
+    """Route based on document type match."""
+    if not state.get("classification_match", True):
+        return "skip_forgery"  # Skip forgery, go to scorer
+    return "continue"
+```
+
+### 4.4 Real-Time Step Tracking
+
+The pipeline streams step updates to the database:
+
+```python
+class DocumentProcessingPipeline:
+    STEP_DISPLAY_NAMES = {
+        "validation": "Validating Document",
+        "metadata": "Extracting Metadata",
+        "ocr": "Running OCR",
+        "fallback_ocr": "Running Fallback OCR",
+        "classifier": "Classifying Document",
+        "extractor": "Extracting Fields",
+        "forgery": "Detecting Forgery",
+        "scorer": "Calculating Scores",
+        "summary": "Generating Summary",
+        "save_results": "Finalizing Results",
+        "complete": "AI Verification Complete",
+    }
     
-    # LLM
-    ANTHROPIC_API_KEY: str
-    LLM_MODEL: str = "claude-3-5-sonnet-20241022"
-    LLM_MAX_TOKENS: int = 4096
-    LLM_TEMPERATURE: float = 0.0
-    
-    # OCR
-    TESSERACT_CMD: str = "/usr/bin/tesseract"
-    GOOGLE_VISION_ENABLED: bool = True
-    GOOGLE_APPLICATION_CREDENTIALS: str = ""
-    
-    # Storage
-    STORAGE_TYPE: str = "local"  # "local" or "s3"
-    STORAGE_PATH: str = "./storage"
-    S3_BUCKET: str = ""
-    S3_REGION: str = ""
-    
-    # Security
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
-    
-    # Processing
-    OCR_CONFIDENCE_THRESHOLD: float = 0.6
-    FORGERY_PASS_THRESHOLD: float = 0.85
-    FORGERY_FAIL_THRESHOLD: float = 0.60
-    
-    class Config:
-        env_file = ".env"
+    async def process(self, ..., on_step_change: Callable[[str, str], None]):
+        """
+        Process with streaming for step tracking.
+        
+        Uses astream() instead of ainvoke() to get real-time updates.
+        """
+        async for event in self.compiled_graph.astream(initial_state):
+            for node_name, node_output in event.items():
+                current_step = node_output.get('current_step', node_name)
+                display_name = self.STEP_DISPLAY_NAMES.get(current_step, current_step)
+                
+                if on_step_change:
+                    on_step_change(request_id, display_name)
 ```
 
 ---
 
-## 6. API Contracts
+## 5. API Contracts
 
-### 6.1 Request Endpoints
+### 5.1 Request Endpoints
 
 #### POST `/api/v1/requests`
+
 ```json
 // Request
 {
-  "customer_id": "C001",
+  "account_number": "1234567890",
   "change_type": "LEGAL_NAME",
   "document_type": "MARRIAGE_CERTIFICATE",
   "current_value": "Priya Sharma",
@@ -1797,21 +737,13 @@ class Settings(BaseSettings):
 {
   "request_id": "REQ-12345",
   "status": "VALIDATED",
-  "message": "Request created successfully. Please upload supporting document."
-}
-
-// Error Response (400 Bad Request)
-{
-  "error": "validation_failed",
-  "details": [
-    {"field": "customer_id", "message": "Customer not found in RPS"}
-  ]
+  "message": "Request created successfully. Please upload supporting document.",
+  "customer_name": "Priya Sharma"
 }
 ```
 
----
-
 #### POST `/api/v1/requests/{id}/upload`
+
 ```json
 // Request: multipart/form-data
 // - file: binary (PDF/JPEG/PNG/TIFF, max 10MB)
@@ -1823,21 +755,85 @@ class Settings(BaseSettings):
   "document_id": "DOC-67890",
   "message": "Document uploaded. Processing will begin shortly."
 }
+```
 
-// Error Response (400 Bad Request)
+#### GET `/api/v1/requests/{id}/document`
+
+```json
+// Query Parameters:
+// - download: boolean (default: false) - Set to true to force download
+
+// Response (200 OK)
+// Content-Type: application/pdf | image/jpeg | image/png | image/tiff
+// Content-Disposition: inline (or attachment if download=true)
+// Binary file content
+
+// Error Responses:
+// 404: Request not found
+// 404: No document uploaded for this request
+// 404: Document file not found on server
+```
+
+#### GET `/api/v1/requests/{id}`
+
+```json
+// Response (200 OK)
 {
-  "error": "file_validation_failed",
-  "details": "File size exceeds 10MB limit"
+  "request_id": "REQ-12345",
+  "customer_id": "C001",
+  "change_type": "LEGAL_NAME",
+  "document_type": "MARRIAGE_CERTIFICATE",
+  "status": "AI_VERIFIED_PENDING_HUMAN",
+  
+  "requested_old_value": "Priya Sharma",
+  "requested_new_value": "Priya Mehta",
+  "extracted_old_value": "Priya Sharma",
+  "extracted_new_value": "Priya Mehta",
+  
+  "extraction_details": [
+    {"field_name": "bride_name", "value": "Priya Sharma", "confidence": 0.97},
+    {"field_name": "married_name", "value": "Priya Mehta", "confidence": 0.94}
+  ],
+  
+  "confidence": {
+    "old_name_match": 1.0,
+    "new_name_match": 1.0,
+    "ocr_confidence": 0.92,
+    "extraction_confidence": 0.94,
+    "doc_authenticity": 0.87,
+    "overall": 0.946
+  },
+  
+  "forgery": {
+    "score": 0.87,
+    "result": "PASS",
+    "metadata_score": 0.95,
+    "ela_score": 0.85,
+    "font_score": 0.82,
+    "ml_score": 0.88
+  },
+  
+  "risk_tier": "LOW",
+  "flags": [],
+  "ai_recommendation": "APPROVE",
+  "ai_summary": "Marriage Certificate verified. Old name matches (100%)...",
+  
+  "document_url": "/api/v1/requests/REQ-12345/document",
+  
+  "current_processing_step": null,
+  "is_locked": false,
+  "can_be_claimed": true,
+  "time_in_current_status_minutes": 15
 }
 ```
 
----
-
-### 6.2 Checker Endpoints
+### 5.2 Checker Endpoints (JWT Protected)
 
 #### GET `/api/v1/checker/queue`
+
 ```json
-// Query params: ?risk_tier=HIGH&status=AI_VERIFIED_PENDING_HUMAN&page=1&limit=20
+// Headers: Authorization: Bearer <jwt_token>
+// Query: ?risk_tier=HIGH&status=AI_VERIFIED_PENDING_HUMAN&page=1&limit=20
 
 // Response (200 OK)
 {
@@ -1848,9 +844,9 @@ class Settings(BaseSettings):
       "change_type": "LEGAL_NAME",
       "risk_tier": "LOW",
       "ai_recommendation": "APPROVE",
-      "overall_score": 0.946,
+      "overall_confidence": 0.946,
       "flags": [],
-      "queued_at": "2024-03-20T10:30:48Z",
+      "created_at": "2024-03-20T10:30:00Z",
       "time_in_queue_minutes": 15
     }
   ],
@@ -1860,14 +856,33 @@ class Settings(BaseSettings):
 }
 ```
 
----
+#### POST `/api/v1/checker/claim/{id}`
+
+```json
+// Headers: Authorization: Bearer <jwt_token>
+
+// Response (200 OK)
+{
+  "request_id": "REQ-12345",
+  "claimed": true,
+  "lock_until": "2024-03-20T11:25:00Z",
+  "message": "Request claimed for 15 minutes"
+}
+
+// Response (409 Conflict)
+{
+  "detail": "Request already claimed by another checker"
+}
+```
 
 #### POST `/api/v1/checker/decide/{id}`
+
 ```json
+// Headers: Authorization: Bearer <jwt_token>
 // Request
 {
   "decision": "APPROVE",
-  "reason": null  // Required for REJECT/ESCALATE
+  "reason": null
 }
 
 // Response (200 OK)
@@ -1879,19 +894,227 @@ class Settings(BaseSettings):
   "message": "Decision recorded. Core banking updated successfully."
 }
 
-// Response for REJECT
+// For REJECT (reason required)
 {
-  "request_id": "REQ-12345",
   "decision": "REJECT",
-  "new_status": "REJECTED",
-  "rps_updated": false,
-  "message": "Request rejected. Branch has been notified."
+  "reason": "Document appears to be a photocopy, not original"
+}
+```
+
+### 5.3 Authentication Endpoints
+
+#### POST `/api/v1/auth/login`
+
+```json
+// Request
+{
+  "username": "checker_jane",
+  "password": "password123"
+}
+
+// Response (200 OK)
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "user": {
+    "username": "checker_jane",
+    "role": "checker"
+  }
 }
 ```
 
 ---
 
-## 7. Error Codes
+## 6. Database Schema
+
+### 6.1 Tables
+
+```sql
+-- Requests table
+CREATE TABLE requests (
+    request_id VARCHAR(36) PRIMARY KEY,
+    idempotency_key VARCHAR(64) UNIQUE,
+    customer_id VARCHAR(20) NOT NULL,
+    change_type VARCHAR(50) NOT NULL,
+    document_type VARCHAR(50) NOT NULL,
+    
+    requested_old_value VARCHAR(255) NOT NULL,
+    requested_new_value VARCHAR(255) NOT NULL,
+    extracted_old_value VARCHAR(255),
+    extracted_new_value VARCHAR(255),
+    extraction_metadata JSONB,
+    
+    old_name_match_score DECIMAL(5,4),
+    new_name_match_score DECIMAL(5,4),
+    ocr_confidence DECIMAL(5,4),
+    extraction_confidence DECIMAL(5,4),
+    doc_authenticity_score DECIMAL(5,4),
+    overall_confidence DECIMAL(5,4),
+    
+    forgery_score DECIMAL(5,4),
+    forgery_result VARCHAR(10),
+    forgery_details JSONB,
+    
+    risk_tier VARCHAR(10),
+    flags JSONB,
+    ai_recommendation VARCHAR(20),
+    ai_summary TEXT,
+    
+    document_storage_path VARCHAR(255),
+    filenet_staging_id VARCHAR(100),
+    filenet_permanent_id VARCHAR(100),
+    
+    status VARCHAR(30) NOT NULL,
+    current_processing_step VARCHAR(50),
+    assigned_checker VARCHAR(50),
+    checker_lock_until TIMESTAMP,
+    checker_decision VARCHAR(20),
+    checker_decision_reason TEXT,
+    
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    validated_at TIMESTAMP,
+    processing_started_at TIMESTAMP,
+    processing_completed_at TIMESTAMP,
+    staged_at TIMESTAMP,
+    claimed_at TIMESTAMP,
+    decided_at TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+-- Audit logs table
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id VARCHAR(36) REFERENCES requests(request_id),
+    event_type VARCHAR(20) NOT NULL,
+    actor_type VARCHAR(20) NOT NULL,
+    actor_id VARCHAR(50),
+    agent_name VARCHAR(50),
+    agent_version VARCHAR(20),
+    llm_model VARCHAR(50),
+    previous_state VARCHAR(30),
+    new_state VARCHAR(30),
+    action_details JSONB,
+    record_snapshot JSONB,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    checksum VARCHAR(64)
+);
+
+-- Customers table (RPS mock)
+CREATE TABLE customers (
+    customer_id VARCHAR(20) PRIMARY KEY,
+    account_number VARCHAR(20) UNIQUE NOT NULL,
+    legal_name VARCHAR(255) NOT NULL,
+    date_of_birth DATE,
+    address TEXT,
+    phone VARCHAR(20),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE INDEX idx_requests_status ON requests(status);
+CREATE INDEX idx_requests_customer ON requests(customer_id);
+CREATE INDEX idx_requests_risk_tier ON requests(risk_tier, status);
+CREATE INDEX idx_requests_checker ON requests(assigned_checker, status);
+CREATE INDEX idx_audit_request ON audit_logs(request_id);
+CREATE INDEX idx_audit_timestamp ON audit_logs(timestamp);
+```
+
+---
+
+## 7. Configuration
+
+### 7.1 Backend Configuration (`app/config.py`)
+
+```python
+class Settings(BaseSettings):
+    """Application settings from environment variables."""
+    
+    # App
+    APP_NAME: str = "IASW"
+    DEBUG: bool = False
+    API_V1_PREFIX: str = "/api/v1"
+    
+    # Database
+    DATABASE_URL: str  # PostgreSQL async URL
+    DATABASE_SYNC_URL: str  # PostgreSQL sync URL (for Celery)
+    
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
+    # LLM
+    ANTHROPIC_API_KEY: str
+    LLM_MODEL: str = "claude-3-5-sonnet-20241022"
+    LLM_MAX_TOKENS: int = 4096
+    LLM_TEMPERATURE: float = 0.0
+    
+    # OCR
+    OCR_CONFIDENCE_THRESHOLD: float = 0.6
+    
+    # Forgery Detection
+    FORGERY_PASS_THRESHOLD: float = 0.85
+    FORGERY_FAIL_THRESHOLD: float = 0.60
+    
+    # JWT Authentication
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_HOURS: int = 24
+    
+    # Pipeline Mode
+    USE_SUPERVISOR_AGENTS: bool = True  # True = supervisor mode, False = linear
+    
+    # Storage
+    STORAGE_PATH: str = "./storage"
+    
+    class Config:
+        env_file = ".env"
+```
+
+### 7.2 Environment Variables
+
+```bash
+# .env
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/iasw
+DATABASE_SYNC_URL=postgresql://user:pass@localhost:5432/iasw
+REDIS_URL=redis://localhost:6379/0
+
+ANTHROPIC_API_KEY=sk-ant-...
+
+JWT_SECRET_KEY=your-secret-key-here
+
+# Optional
+USE_SUPERVISOR_AGENTS=true
+DEBUG=false
+```
+
+### 7.3 Database Edit Utility (`edit_db.py`)
+
+Interactive CLI tool for testing and database management:
+
+```python
+# Run with: python backend/edit_db.py
+
+# Features:
+# 1. List all requests - view recent requests with status
+# 2. Reset specific request to PENDING_HUMAN - for re-testing checker workflow
+# 3. Reset ALL completed requests - bulk reset for testing
+# 4. Delete a request - remove request and audit logs
+# 5. Update a field on a request - modify any field directly
+# 6. Exit
+
+# Example usage:
+# - Reset a request after testing approval flow
+# - Delete test requests created during development
+# - Update risk_tier or ai_recommendation for testing different scenarios
+```
+
+---
+
+## 8. Error Handling
+
+### 8.1 Error Codes
 
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
@@ -1900,73 +1123,37 @@ class Settings(BaseSettings):
 | `INVALID_DOCUMENT_TYPE` | 400 | Document type not allowed for change type |
 | `FILE_TOO_LARGE` | 400 | File exceeds 10MB limit |
 | `INVALID_FILE_FORMAT` | 400 | File is not PDF/JPEG/PNG/TIFF |
-| `VIRUS_DETECTED` | 400 | File failed virus scan |
 | `REQUEST_NOT_FOUND` | 404 | Request ID not found |
-| `REQUEST_ALREADY_CLAIMED` | 409 | Request is locked by another checker |
+| `REQUEST_ALREADY_CLAIMED` | 409 | Request locked by another checker |
 | `LOCK_EXPIRED` | 409 | Checker's lock has expired |
 | `REASON_REQUIRED` | 400 | Reason required for reject/escalate |
-| `HITL_VIOLATION` | 403 | Non-human actor attempted restricted action |
+| `UNAUTHORIZED` | 401 | Invalid or missing JWT token |
+| `FORBIDDEN` | 403 | User lacks required role |
 | `PROCESSING_FAILED` | 500 | Document processing pipeline failed |
 
----
+### 8.2 Error Response Format
 
-## 8. Observability
-
-### 8.1 Logging Structure
-
-```python
-# Every log entry follows this structure
+```json
 {
-    "timestamp": "2024-03-20T10:30:45.123Z",
-    "level": "INFO",
-    "service": "iasw-backend",
-    "request_id": "REQ-12345",  # Correlation ID
-    "trace_id": "abc123",
-    "span_id": "def456",
-    "agent": "scorer",  # Which agent/component
-    "step": "calculate_name_match",
-    "duration_ms": 45,
-    "status": "success",
-    
-    # Context (no PII)
-    "customer_id_hash": "sha256:...",  # Hashed, not raw
-    "change_type": "LEGAL_NAME",
-    "risk_tier": "LOW",
-    
-    # Metrics
-    "ocr_confidence": 0.92,
-    "overall_score": 0.946,
-    "llm_tokens": {"input": 1250, "output": 180},
-    "llm_latency_ms": 890
+  "error": "REQUEST_ALREADY_CLAIMED",
+  "detail": "Request is currently being reviewed by another checker",
+  "request_id": "REQ-12345"
 }
 ```
 
----
-
-### 8.2 LangSmith Integration
+### 8.3 Pipeline Error Handling
 
 ```python
-# backend/app/agents/graph.py
+# Agent-level: Return partial results with error flag
+return {
+    **state,
+    "extraction_error": str(e),
+    "flags": state.get("flags", []) + ["EXTRACTION_FAILED"]
+}
 
-from langsmith import traceable
+# Pipeline-level: Set status to FAILED
+request.status = RequestStatus.FAILED
 
-class DocumentProcessingGraph:
-    
-    @traceable(name="process_document", run_type="chain")
-    def invoke(self, state: ProcessingState) -> ProcessingState:
-        """
-        LangSmith traces the entire graph execution.
-        
-        Tracked:
-            - Each node execution time
-            - LLM calls with prompts and responses
-            - Token usage per call
-            - State at each step
-            - Errors and retries
-        """
-        return self.graph.invoke(state)
+# Task-level: Retry with exponential backoff
+raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
 ```
-
----
-
-This LLD provides complete implementation guidance. Ready to start coding?
